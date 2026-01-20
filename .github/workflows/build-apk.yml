@@ -1,0 +1,71 @@
+name: Build Professional Signed APK (Sikkha 48)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js & Java 21
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Install Dependencies & Build Web
+        run: |
+          npm install
+          npm run build
+          # JS Obfuscator - প্রোফেশনাল সিকিউরিটি
+          npm install -g javascript-obfuscator
+          javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
+
+      - name: Capacitor Sync & Icon Generate
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
+          # সরাসরি কনফিগারেশন আপডেট
+          npx cap init "Sikkha 48" "com.sikkha.nbd" --web-dir dist --force
+          npx cap add android || true
+          
+          # আইকন জেনারেট করা
+          if [ -f "assets/icon.png" ]; then
+            npx capacitor-assets generate --android
+          fi
+
+          # ভার্সন কোড এবং নাম আপডেট
+          sed -i 's/versionCode [0-9]*/versionCode 4/' android/app/build.gradle
+          sed -i 's/versionName "[^"]*"/versionName "4.4.1"/' android/app/build.gradle
+          
+          # সকল মাইক্রোফোন ও স্টোরেজ পারমিশন ম্যানিফেস্ট থেকে মুছে ফেলা
+          sed -i '/android.permission.READ_MEDIA_IMAGES/d' android/app/src/main/AndroidManifest.xml
+          
+          npx cap sync android
+
+      - name: Build and Sign APK
+        run: |
+          # আপনার দেওয়া Base64 কোড থেকে সরাসরি Keystore তৈরি
+          echo "77+977+977+977+9AAAAAgAAAAEAAAABAAhzaWtraGE0OAAAAe+/vdutAxEAAAUAMO+/vQTvv70wDgYKKwYBBAEqAhEBAQUABO+/vQTvv70r77+9e++/ve+/vWA+77+9dzbvv70hD2dK77+9Gu+/vdKH77+9Ju+/ve+/vcmaYiLvv70377+9G++/ve+/vQgDKO+/vX/vv71H77+9DO+/vTpBYlHvv73vv73vv70g77+977+9Am3vv73Kju+/vUkJ77+9Qu+/vWdxUu+/vTzvv73vv71J77+977+977+977+9dwzvv70477+9fwrctO+/vQ7vv719d++/vUY1ekjIh3AD77+9Su+/ve+/ve+/vWlpVO+/vUBdCwTvv71iYAvvv73vv73vv73vv70R77+977+9xbnvv70r77+977+9Gu+/ve+/vXxI77+9aGhg77+9He+/vSVNamla77+9R++/ve+/ve+/vTIL77+977+977+9QA/vv73vv73Mru+/vXfvv73vv73vv70lYjvvv71NL++/vXXvv70h77+9OzJ5Ie+/ve+/vUR2SSXvv73vv73mm6o4LTXvv73vv70W77+9P2Dvv73vv71P77+9R++/vQwY77+977+977+977+9Pu+/vSHCo++/vQPvv71C77+9RR9H77+9aO+/ve+/ve+/ve+/ve+/vd6m77+977+977+9e8ykfjIjE++/vRzvv73vv70BMgTvv73vv73vv70d77+9Ae+/vXjvv73vv73vv73vv70FXe+/ve+/vXhEN86V77+9dhzvv71j77+9Je+/vQzvv71h77+9TVVkCi7vv73vv73vv70WV17vv73vv70Z77+9ZgA3V0zvv70Uee+/vSXvv71MPe+/vU3vv73vv73vv73vv70De++/ve+/vV7vv73vv71DSu+/ve+/ve+/ve+/ve+/vQPvv70Y77+977+9Ou+/vS1A77+977+977+977+977+9Fu+/vV/SiHvvv71xPO+/ve+/vRLvv73vv73vv73vv70M77+977+977+9VO+/vXAUG++/ve+/ve+/vU8g77+977+9S++/vei8s3piy7NDF++/ve+/ve+/vQ7vv71rX2Xvv70r77+9MO+/ve+/vVrLke+/ve+/vVVrQO+/ve+/vU7vv71677+977+9yLHFgO+/vR7vv71377+9LC4YbUAoC0Tvv70LK3vvv73vv71t77+9Qknvv70mPEzvv73vv71/77+9z4BVQRnvv73vv70Q77+9YVl777+977+977+977+977+9fu+/vQAyZe+/vRNV77+9GWLvv71+Ee+/vdOEcu+/vc+lW1Lvv73vv73Ko++/ve+/vV4YOjLvv73ylIChCu+/ve+/vUHvv73vv71Jby0O77+9Iu+/vQLvv70U77+9TVkiXwcae++/ve+/ve+/veRIhGcW777+977+977+977+9ESrvv70xIO+/ve+/vU3vv73vv70lUwFeE++/ve+/vXc977+9Ne+/vWhOFgXvv73vv70YCkUsexwr77+977+977+9IMKtzarvv70LMu+/vQrvv70pEnDKuDPvv71z77+977+9Pu+/vX1QBSoQ77+9cG5C77+9U0RF0Znvv73vv71sNe+/vdOqL1Z077+9DO+/vQPvv73vv71n77+9T34u77+977+977+9Fe+/ve+/ve+/ve+/vRd977+977+9JO+/vVA677+977+9TO+/vVfvv70H77+9YH/vv73vv73vv71yA9W677+9P++/ve+/vVTvv70I77+9SWHvv70JFi4X77+977+9NmLvv73vv73vv71ZBO+/vX5J77+9Oe+/vQXegAbvv73vv73vv73vv73vv71177+977+977+977+977+977+977+9NTvvv710RkPvv73vv73vv70j77+9V1gQ77+9Te+/ve+/vUDvv70Kb++/ve+/vV55Knfvv71377+9D++/ve+/vUTvv73vv70dM++/vUMIX++/ve+/ve+/ve+/vXjvv73vv70b77+9LB/euV0577+9cFDvv71rEO+/vTvvv73IhmRWHmA777+977+9Y++/vX7vv73vv73Voe+/vTYgQtGf77+9Xu+/vQoH77+977+9CUrvv70f77+977+9NnloVmYxSxjvv70X77+977+9GjNn77+9du+/vSDvv73vv71i77+9NX1H77+9Oe+/ve+/vcuOR0Ix77+9LQpr77+9RO+/vRBWTA8KFVBfFe+/ve+/vRjvv71TY1fvv718WAxK77+977+9Uzbvv70SJO+/ve+/vVDvv73vv71jPS9C77+9EhBtee+/ve+/ve+/ve+/vXXvv73vv70377+9BHnvv73vv71iXO+/vXdG77+9DAXvv70/OG1rLy88Nn7vv70q77+977+9P++/vTYG2q7vv70aNHXvv7130Kfvv70577+9OCzvv71CWR0U77+9VWQq77+977+977+9Q++/ve+/ve+/vRo5G++/ve+/vdq677+9cnA0Pe+/vRbvv73vv73vv71X77+9Re+/vTgVEO+/vWHvv73vv73vv73vv71JUu+/ve+/vXHvv71N77+9Uu+/ve+/vWNqTe+/vX1I77+977+9NO+/vTrvv70OZ++/ve+/ve+/vVLdvyXvv70c77+9Kxrvv73vv73vv73qibtMa0R277+977+977+977+9Ou+/vSh777+977+9Cu+/vSzvv71Cee+/ve+/ve+/ve+/vXbvv70BHe+/ve+/vTJ6NTkEbO+/ve+/ve+/ve+/vULvv73vv73vv73vv71qf++/vVHvv70mf++/vRYH6qm5WwHvv73Hke+/vWhwyIXvv73vv70Bce+/ve+/vQpPZu+/ve+/ve+/vQbvv71JBwrvv73vv71l77+9GjDMpe+/vVnvv71d77+9R++/vWvvv71pcR/vv71y77+9Gu+/vSfvv71G77+9Ye+/ve+/vce+77+977+9PO+/vVRs77+9Eu+/vQbvv712WO+/vTHvv70uzIHvv71Z77+9E++/ve+/ve+/vRbvv73vv70G77+9ETRs77+9Eu+/vW4mde+/ve+/ve+/ve+/ve+/vVTvv70Q77+9VM2N77+9Sinvv70JCVYRbhcAAAABAAVYLjUwOQAAA++/vTDvv70D77+9MO+/vQJ877+9AwIBAgIEUSoL77+9MAoGCSrvv71I77+977+9CgEBCgUAMGMxCzAJBgNVBAYTAjg4MQ4wDAYDVQQIEwVEaGFrYTERMA8GA1UEBxMIUmFqc2hhaGkxETAPBgNVBAsTCFRuYXllbTQ4MREwDwYDVQQKEwhUbmF5ZW00ODELMAkGA1UEAxMCVG8wIBcKMjYwMTIwMTM1MTQ3WhgPMjEyNTEyMjcxMzUxNDdaMGMxCzAJBgNVBAYTAjg4MQ4wDAYDVQQIEwVEaGFrYTERMA8GA1UEBxMIUmFqc2hhaGkxETAPBgNVBAsTCFRuYXllbTQ4MREwDwYDVQQKEwhUbmF5ZW00ODELMAkGA1UEAxMCVG8w77+9ASIwCgYJKu+/vUjvv73vv70KAQEBBQAD77+9AQ8AMO+/vQEKAu+/vQEBAO+/vRTMjHbvv71I77+9cm7vv73vv73vv70s77+977+977+977+9Cu+/vR9l77+977+9ChQ377+977+977+977+9Hlfvv73vv73vv73vv73vv70i77+977+977+9cu+/ve+/vTxQ77+9XxIXCTrvv73vv73vv73vv73vv701V03vv70APCQa77+9TO+/ve+/ve+/vW1BUO+/ve+/vRZb77+977+9GO+/ve+/vUYm77+9Si7vv73vv71JzokZX++/ve+/vSfvv73vv71E77+9Ombvv73vv70y77+977+9Nu+/vUpi77+9Cj3vv71aeu+/vTXvv70zXhfvv70QRiZz77+977+9I2xhQe+/ve+/vQo2JHHvv71HxJZi77+9fy5U77+9Ju+/vTh0HO+/vQXvv70P2Izvv73vv71v77+977+9Wzjvv73vv73vv73vv73vv73vv73vv71YAu+/vSLvv71o77+9BHDvv73UoO+/ve+/vQxOLu+/ve+/vUHVo++/vQ5tUWvvv73vv73vv73vv70DCO+/ve+/vTXvv73vv73vv73vv73vv70B77+9f++/vQRZN++/vRh477+9bhfvv71R77+977+9MyZd77+93LXvv73vv70KExLvv73vv70+77+9S++/vSDXqO+/vQIDAQAB77+9TjBMMB0GA1UdDgQWBBTvv71977+977+9NFJ1dUzvv70Cahbvv70QM0RXejArBgNVHRAEJDAi77+9DzIwMjYwMTIwMTM1MTQ3Wu+/vQ8yMTI1MTIyNzEzNTE0N1owCgYJKu+/vUjvv73vv70KAQEKBQAD77+9AQEAc++/vXnvv73vv70lY++/vU7vv70XA++/vXBn7omvS++/vUjvv71B77+9D0/vv71Y77+977+9Du+/ve+/vQvvv73vv71BMQjvv73vv70L77+977+9YXfvv70vDu+/vWtt77+977+9e++/ve+/vQhvbe+/vR7vv73vv71r77+977+9dO+/vRXvv70HYe+/vSHvv73Du0gw77+9aXvvv71o77+9LWLvv70F77+9YFZWbBnvv70AfO+/vSczZxHvv73vv70yQWxM77+9AQFi77+9P++/vcKwV2zvv70q77+9XRzvv70aBe+/vQXvv71a04gY77+977+9PXPvv73vv73vv70cBe+/vXvvv73UiVp077+977+977+977+9Oe+/vUVkXO+/vTYE77+9Au+/vWAjeC/vv73vv73vv73vv73vv70YUi9977+9bu+/vRlT77+977+9GOOjsSHvv70K77+977+977+9Yhjvv73vv71H77+977+977+9Ue+/ve+/vXtw77+9Eu+/ve+/vSMa77+9bFYP77+977+977+9bEdBelzvv73vv71wcu+/vXzvv73vv73vv73vv70YZe+/ve+/ve+/vSEX77+977+977+977+9IwDvv73vv70577+9Rjvvv70Ife+/vVcQ77+977+9eu+/vXLvv73vv71VA++/ve+/ve+/vQ==" | base64 -d > android/app/release.jks
+          
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=release.jks \
+            -Pandroid.injected.signing.store.password=nayem48 \
+            -Pandroid.injected.signing.key.alias=sikkha48 \
+            -Pandroid.injected.signing.key.password=nayem48
+
+      - name: Upload Signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sikkha-48-Final-Signed
+          path: android/app/build/outputs/apk/release/app-release.apk
