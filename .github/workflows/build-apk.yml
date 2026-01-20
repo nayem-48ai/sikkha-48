@@ -29,7 +29,7 @@ jobs:
           npm install -g javascript-obfuscator
           javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
 
-      - name: Capacitor Setup & Permissions
+      - name: Capacitor Setup & Assets
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
           rm -f capacitor.config.json capacitor.config.ts
@@ -37,45 +37,48 @@ jobs:
           rm -rf android
           npx cap add android
           
-          # আইকন জেনারেট (ফেইল করলে বিল্ড থামবে না)
           if [ -f "assets/icon.png" ]; then
-            npx capacitor-assets generate --android || echo "Icon generation failed, skipping..."
+            npx capacitor-assets generate --android || echo "Icon fail, skip"
           fi
 
           # ভার্সন আপডেট
-          sed -i 's/versionCode [0-9]*/versionCode 5/' android/app/build.gradle
-          sed -i 's/versionName "[^"]*"/versionName "5.0.0"/' android/app/build.gradle
+          sed -i 's/versionCode [0-9]*/versionCode 6/' android/app/build.gradle
+          sed -i 's/versionName "[^"]*"/versionName "6.0.0"/' android/app/build.gradle
           
-          # পারমিশন নিখুঁতভাবে রিমুভ করা
+          # পারমিশন রিমুভ করার নিরাপদ পদ্ধতি
           sed -i '/android.permission.RECORD_AUDIO/d' android/app/src/main/AndroidManifest.xml
+          sed -i '/android.permission.MODIFY_AUDIO_SETTINGS/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.READ_EXTERNAL_STORAGE/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.WRITE_EXTERNAL_STORAGE/d' android/app/src/main/AndroidManifest.xml
           
           npx cap sync android
 
-      - name: Sign and Build APK
+      - name: Build and Sign APK
         run: |
-          # secrets.txt থেকে ভ্যালুগুলো ক্লীন করে নেওয়া (ট্রেলিং স্পেস রিমুভ)
-          KS_B64=$(grep 'KS_B64=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
-          KS_PASS=$(grep 'KS_PASS=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
-          KS_ALIAS=$(grep 'KS_ALIAS=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
+          # secrets.txt থেকে ডেটা সংগ্রহ
+          KS_DATA=$(grep 'KS_B64=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
+          PASS=$(grep 'KS_PASS=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
+          ALIAS=$(grep 'KS_ALIAS=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
           
-          # Keystore ফাইল তৈরি
-          echo "$KS_B64" | base64 -d > android/app/release.jks
+          # Keystore তৈরি
+          echo "$KS_DATA" | base64 -d > android/app/release.jks
           
           cd android
           chmod +x gradlew
           
-          # সরাসরি পাসওয়ার্ড দিয়ে বিল্ড রান করা
+          # গ্র্যাডল ক্লিন বিল্ড
+          ./gradlew clean
+          
+          # সাইনিং সহ বিল্ড
           ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=release.jks \
-            -Pandroid.injected.signing.store.password="$KS_PASS" \
-            -Pandroid.injected.signing.key.alias="$KS_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KS_PASS" \
-            --stacktrace --info
+            -Pandroid.injected.signing.store.password="$PASS" \
+            -Pandroid.injected.signing.key.alias="$ALIAS" \
+            -Pandroid.injected.signing.key.password="$PASS" \
+            --no-daemon
 
       - name: Upload Signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: Sikkha-48-Final-Signed
+          name: Sikkha-48-Final-APK
           path: android/app/build/outputs/apk/release/app-release.apk
