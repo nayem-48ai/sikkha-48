@@ -1,4 +1,4 @@
-name: Build Professional Signed APK (Sikkha 48)
+name: Build Optimized Unsigned APK (Sikkha 48)
 
 on:
   push:
@@ -26,59 +26,47 @@ jobs:
         run: |
           npm install
           npm run build
+          # JS Obfuscator - কোড সুরক্ষা এবং অপ্টিমাইজেশন
           npm install -g javascript-obfuscator
           javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
 
-      - name: Capacitor Setup & Assets
+      - name: Capacitor Setup & Permissions Clean
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
-          rm -f capacitor.config.json capacitor.config.ts
-          npx cap init "Sikkha 48" "com.sikkha.nbd" --web-dir dist
+          
+          # ফ্রেশ অ্যান্ড্রয়েড প্রোজেক্ট তৈরি
           rm -rf android
+          npx cap init "Sikkha 48" "com.sikkha.nbd" --web-dir dist
           npx cap add android
           
+          # আইকন ও স্প্ল্যাশ জেনারেট
           if [ -f "assets/icon.png" ]; then
-            npx capacitor-assets generate --android || echo "Icon fail, skip"
+            npx capacitor-assets generate --android || echo "Icon generation failed, continuing..."
           fi
 
-          # ভার্সন আপডেট
+          # ভার্সন কোড আপডেট (৬.০.০)
           sed -i 's/versionCode [0-9]*/versionCode 6/' android/app/build.gradle
           sed -i 's/versionName "[^"]*"/versionName "6.0.0"/' android/app/build.gradle
           
-          # পারমিশন রিমুভ করার নিরাপদ পদ্ধতি
+          # পারমিশন রিমুভ করা (Strict Cleanup)
+          # Manifest ফাইল থেকে অপ্রয়োজনীয় পারমিশন লাইনগুলো মুছে ফেলা হচ্ছে
           sed -i '/android.permission.RECORD_AUDIO/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.MODIFY_AUDIO_SETTINGS/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.READ_EXTERNAL_STORAGE/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.WRITE_EXTERNAL_STORAGE/d' android/app/src/main/AndroidManifest.xml
+          sed -i '/android.permission.READ_MEDIA_IMAGES/d' android/app/src/main/AndroidManifest.xml
+          sed -i '/android.permission.CAMERA/d' android/app/src/main/AndroidManifest.xml
           
           npx cap sync android
 
-      - name: Build and Sign APK
+      - name: Build Unsigned Release APK
         run: |
-          # secrets.txt থেকে ডেটা সংগ্রহ
-          KS_DATA=$(grep 'KS_B64=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
-          PASS=$(grep 'KS_PASS=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
-          ALIAS=$(grep 'KS_ALIAS=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
-          
-          # Keystore তৈরি
-          echo "$KS_DATA" | base64 -d > android/app/release.jks
-          
           cd android
           chmod +x gradlew
-          
-          # গ্র্যাডল ক্লিন বিল্ড
-          ./gradlew clean
-          
-          # সাইনিং সহ বিল্ড
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=release.jks \
-            -Pandroid.injected.signing.store.password="$PASS" \
-            -Pandroid.injected.signing.key.alias="$ALIAS" \
-            -Pandroid.injected.signing.key.password="$PASS" \
-            --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
-      - name: Upload Signed APK
+      - name: Upload Unsigned APK
         uses: actions/upload-artifact@v4
         with:
-          name: Sikkha-48-Final-APK
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: Sikkha-48-Unsigned-Optimized
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
