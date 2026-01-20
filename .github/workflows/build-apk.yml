@@ -26,22 +26,17 @@ jobs:
         run: |
           npm install
           npm run build
-          # JS Obfuscator - কোড প্রোটেকশন
           npm install -g javascript-obfuscator
           javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
 
-      - name: Capacitor Setup & Permissions Fix
+      - name: Capacitor Setup & Assets
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
-          
-          # ফ্রেশ কনফিগারেশন
           rm -f capacitor.config.json capacitor.config.ts
           npx cap init "Sikkha 48" "com.sikkha.nbd" --web-dir dist
-          
           rm -rf android
           npx cap add android
           
-          # আইকন জেনারেট করা
           if [ -f "assets/icon.png" ]; then
             npx capacitor-assets generate --android
           fi
@@ -50,25 +45,32 @@ jobs:
           sed -i 's/versionCode [0-9]*/versionCode 4/' android/app/build.gradle
           sed -i 's/versionName "[^"]*"/versionName "4.4.1"/' android/app/build.gradle
           
-          # সকল মাইক্রোফোন ও স্টোরেজ পারমিশন রিমুভ (বোল্ড পদক্ষেপ)
+          # পারমিশন রিমুভ
           sed -i '/android.permission.RECORD_AUDIO/d' android/app/src/main/AndroidManifest.xml
-          sed -i '/android.permission.MODIFY_AUDIO_SETTINGS/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.READ_EXTERNAL_STORAGE/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.WRITE_EXTERNAL_STORAGE/d' android/app/src/main/AndroidManifest.xml
-          sed -i '/android.permission.READ_MEDIA_IMAGES/d' android/app/src/main/AndroidManifest.xml
           
           npx cap sync android
 
-      - name: Extract Secrets & Sign APK
+      - name: Generate Keystore from Secrets File
         run: |
-          # secrets.txt থেকে নিখুঁতভাবে ডেটা বের করা
-          # sed ব্যবহার করে নিশ্চিত করা হচ্ছে যাতে কোনো ইনভ্যালিড ক্যারেক্টার না থাকে
-          KS_DATA=$(grep 'KS_B64=' secrets.txt | sed 's/KS_B64=//')
-          PASS=$(grep 'KS_PASS=' secrets.txt | sed 's/KS_PASS=//')
-          ALIAS=$(grep 'KS_ALIAS=' secrets.txt | sed 's/KS_ALIAS=//')
-          
-          # Base64 থেকে JKS ফাইল জেনারেট
+          # secrets.txt ফাইল থেকে ভ্যালুগুলো পড়া
+          KS_DATA=$(grep 'KS_B64=' secrets.txt | cut -d'=' -f2-)
           echo "$KS_DATA" | tr -d '\n\r ' | base64 -d > android/app/release.jks
+          
+          # ফাইলটি তৈরি হয়েছে কিনা চেক করা (Debug)
+          if [ -f "android/app/release.jks" ]; then
+            echo "Keystore successfully generated."
+          else
+            echo "Error: Keystore generation failed."
+            exit 1
+          fi
+
+      - name: Build and Sign APK
+        run: |
+          # secrets.txt থেকে পাসওয়ার্ড এবং অ্যালিয়াস বের করা
+          PASS=$(grep 'KS_PASS=' secrets.txt | cut -d'=' -f2-)
+          ALIAS=$(grep 'KS_ALIAS=' secrets.txt | cut -d'=' -f2-)
           
           cd android
           chmod +x gradlew
@@ -83,4 +85,3 @@ jobs:
         with:
           name: Sikkha-48-Final-Signed
           path: android/app/build/outputs/apk/release/app-release.apk
-          
