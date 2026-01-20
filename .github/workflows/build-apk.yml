@@ -29,7 +29,7 @@ jobs:
           npm install -g javascript-obfuscator
           javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
 
-      - name: Capacitor Setup & Assets
+      - name: Capacitor Setup & Permissions
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
           rm -f capacitor.config.json capacitor.config.ts
@@ -37,48 +37,42 @@ jobs:
           rm -rf android
           npx cap add android
           
+          # আইকন জেনারেট (ফেইল করলে বিল্ড থামবে না)
           if [ -f "assets/icon.png" ]; then
-            npx capacitor-assets generate --android
+            npx capacitor-assets generate --android || echo "Icon generation failed, skipping..."
           fi
 
           # ভার্সন আপডেট
-          sed -i 's/versionCode [0-9]*/versionCode 4/' android/app/build.gradle
-          sed -i 's/versionName "[^"]*"/versionName "4.4.1"/' android/app/build.gradle
+          sed -i 's/versionCode [0-9]*/versionCode 5/' android/app/build.gradle
+          sed -i 's/versionName "[^"]*"/versionName "5.0.0"/' android/app/build.gradle
           
-          # পারমিশন রিমুভ
+          # পারমিশন নিখুঁতভাবে রিমুভ করা
           sed -i '/android.permission.RECORD_AUDIO/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.READ_EXTERNAL_STORAGE/d' android/app/src/main/AndroidManifest.xml
           sed -i '/android.permission.WRITE_EXTERNAL_STORAGE/d' android/app/src/main/AndroidManifest.xml
           
           npx cap sync android
 
-      - name: Generate Keystore from Secrets File
+      - name: Sign and Build APK
         run: |
-          # secrets.txt ফাইল থেকে ভ্যালুগুলো পড়া
-          KS_DATA=$(grep 'KS_B64=' secrets.txt | cut -d'=' -f2-)
-          echo "$KS_DATA" | tr -d '\n\r ' | base64 -d > android/app/release.jks
+          # secrets.txt থেকে ভ্যালুগুলো ক্লীন করে নেওয়া (ট্রেলিং স্পেস রিমুভ)
+          KS_B64=$(grep 'KS_B64=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
+          KS_PASS=$(grep 'KS_PASS=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
+          KS_ALIAS=$(grep 'KS_ALIAS=' secrets.txt | cut -d'=' -f2- | tr -d '\n\r ')
           
-          # ফাইলটি তৈরি হয়েছে কিনা চেক করা (Debug)
-          if [ -f "android/app/release.jks" ]; then
-            echo "Keystore successfully generated."
-          else
-            echo "Error: Keystore generation failed."
-            exit 1
-          fi
-
-      - name: Build and Sign APK
-        run: |
-          # secrets.txt থেকে পাসওয়ার্ড এবং অ্যালিয়াস বের করা
-          PASS=$(grep 'KS_PASS=' secrets.txt | cut -d'=' -f2-)
-          ALIAS=$(grep 'KS_ALIAS=' secrets.txt | cut -d'=' -f2-)
+          # Keystore ফাইল তৈরি
+          echo "$KS_B64" | base64 -d > android/app/release.jks
           
           cd android
           chmod +x gradlew
+          
+          # সরাসরি পাসওয়ার্ড দিয়ে বিল্ড রান করা
           ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=release.jks \
-            -Pandroid.injected.signing.store.password=$PASS \
-            -Pandroid.injected.signing.key.alias=$ALIAS \
-            -Pandroid.injected.signing.key.password=$PASS
+            -Pandroid.injected.signing.store.password="$KS_PASS" \
+            -Pandroid.injected.signing.key.alias="$KS_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KS_PASS" \
+            --stacktrace --info
 
       - name: Upload Signed APK
         uses: actions/upload-artifact@v4
