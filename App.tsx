@@ -4,7 +4,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase-config';
 import { getUserProfile } from './services/authService';
 import { UserProfile, UserRole } from './types';
-
+// Update Check ✓
+import UpdateChecker from './components/UpdateChecker'; 
 // Pages
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
@@ -43,7 +44,8 @@ const App: React.FC = () => {
   }
 
   return (
-    <Router>
+    <Router>
+      <UpdateChecker />
       <div className="min-h-screen">
         <Navbar user={user} />
         <main>
