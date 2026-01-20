@@ -50,12 +50,12 @@ jobs:
             npx capacitor-assets generate --android
           fi
 
-          # ২. ভার্সন সেট করা (Version Code: 4, Version Name: 2.48)
+          # ২. ভার্সন সেট করা (Version Code: 2, Version Name: 2.48)
           sed -i 's/versionCode [0-9]*/versionCode 4/' android/app/build.gradle
           sed -i 's/versionName "[^"]*"/versionName "2.48"/' android/app/build.gradle
           
-          # Manifest এও ভার্সন আপডেট করা
-          sed -i 's/android:versionCode="[0-9]*"/android:versionCode="4"/' android/app/src/main/AndroidManifest.xml
+          # Manifest এ ও ভার্সন আপডেট করা
+          sed -i 's/android:versionCode="[0-9]*"/android:versionCode="2"/' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:versionName="[0-9.]*"/android:versionName="2.48"/' android/app/src/main/AndroidManifest.xml
 
           # ৩. অপ্রয়োজনীয় পারমিশন রিমুভ বা ক্লিন রাখা 
