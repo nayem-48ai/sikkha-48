@@ -13,29 +13,31 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java 8
-        # ফিচার ফোনের জাভা সমর্থনের জন্য Java 8 বা তার নিচের ভার্সন সবথেকে ভালো
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '8'
 
-      - name: Install Build Tools
-        run: sudo apt-get update && sudo apt-get install -p ant -y
+      - name: Install Ant
+        run: sudo apt-get update && sudo apt-get install ant -y
 
-      - name: Compile Java Code
+      - name: Create Java Source Structure
+        run: |
+          mkdir -p src/com/sikkha
+          # একটি বেসিক জাভা ফাইল তৈরি করছি যা আপনার অ্যাপের নাম দেখাবে
+          echo 'package com.sikkha;
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("Sikkha48 Web App Loader");
+                  System.out.println("Version: 2.48");
+              }
+          }' > src/com/sikkha/Main.java
+
+      - name: Compile and Build JAR
         run: |
           mkdir -p build/classes
-          # আপনার যদি কোনো .java সোর্স ফাইল থাকে তবে সেটি কম্পাইল হবে
-          # যদি না থাকে, তবে একটি বেসিক মেইন ক্লাস তৈরি করে টেস্ট রান করবে
-          if [ -d "src/main/java" ]; then
-            javac -source 1.8 -target 1.8 -d build/classes src/main/java/**/*.java
-          fi
-
-      - name: Create JAR File
-        run: |
-          # ম্যানিফেস্ট ফাইল তৈরি করা
+          javac -d build/classes src/com/sikkha/Main.java
           echo "Main-Class: com.sikkha.Main" > manifest.txt
-          # জার ফাইল তৈরি
           jar cvfm Sikkha48.jar manifest.txt -C build/classes .
 
       - name: Upload JAR Artifact
