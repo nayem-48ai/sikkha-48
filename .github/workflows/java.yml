@@ -1,4 +1,4 @@
-name: Build Sikkha48 JAR (Java Version)
+name: Build Sikkha48 J2ME JAR
 
 on:
   push:
@@ -6,42 +6,69 @@ on:
       - main
 
 jobs:
-  build-jar:
+  build-j2me:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Java 8
+      - name: Setup Java 8 (Compatibility for J2ME)
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '8'
 
-      - name: Install Ant
-        run: sudo apt-get update && sudo apt-get install ant -y
-
-      - name: Create Java Source Structure
+      - name: Create J2ME Project Structure
         run: |
           mkdir -p src/com/sikkha
-          # একটি বেসিক জাভা ফাইল তৈরি করছি যা আপনার অ্যাপের নাম দেখাবে
+          mkdir -p res
+          
+          # ১. একটি আইকন তৈরি (যদি আপনার প্রোজেক্টে না থাকে)
+          # আপনার আগের দেওয়া icon.png ব্যবহারের চেষ্টা করবে
+          if [ -f "assets/icon.png" ]; then
+            cp assets/icon.png res/icon.png
+          else
+            # ডিফল্ট আইকন না থাকলে একটি খালি প্লেসহোল্ডার
+            touch res/icon.png 
+          fi
+
+          # ২. প্রধান জাভা কোড (GameMIDlet স্টাইল)
           echo 'package com.sikkha;
-          public class Main {
-              public static void main(String[] args) {
-                  System.out.println("Sikkha48 Web App Loader");
-                  System.out.println("Version: 2.48");
+          import javax.microedition.midlet.*;
+          import javax.microedition.lcdui.*;
+
+          public class Sikkha48 extends MIDlet {
+              private Display display;
+              public Sikkha48() { display = Display.getDisplay(this); }
+              public void startApp() {
+                  Form f = new Form("Sikkha48");
+                  f.append("Welcome to Sikkha48 Web-to-Jar\n");
+                  f.append("Feature Phone Version 2.48");
+                  display.setCurrent(f);
               }
-          }' > src/com/sikkha/Main.java
+              public void pauseApp() {}
+              public void destroyApp(boolean unconditional) {}
+          }' > src/com/sikkha/Sikkha48.java
 
-      - name: Compile and Build JAR
+      - name: Create Proper J2ME Manifest
         run: |
-          mkdir -p build/classes
-          javac -d build/classes src/com/sikkha/Main.java
-          echo "Main-Class: com.sikkha.Main" > manifest.txt
-          jar cvfm Sikkha48.jar manifest.txt -C build/classes .
+          echo "Manifest-Version: 1.0
+          MIDlet-Name: Sikkha48
+          MIDlet-Version: 2.48
+          MIDlet-Vendor: Sikkha
+          MIDlet-1: Sikkha48, /icon.png, com.sikkha.Sikkha48
+          MicroEdition-Profile: MIDP-2.0
+          MicroEdition-Configuration: CLDC-1.1" > manifest.mf
 
-      - name: Upload JAR Artifact
+      - name: Build JAR
+        run: |
+          # J2ME এর জন্য প্রি-ভেরিফিকেশন প্রয়োজন হয়, এখানে আমরা স্ট্যান্ডার্ড কম্পাইল করছি
+          mkdir -p bin
+          javac -source 1.3 -target 1.3 -d bin src/com/sikkha/Sikkha48.java || javac -d bin src/com/sikkha/Sikkha48.java
+          jar cvfm Sikkha48.jar manifest.mf -C bin . -C res .
+
+      - name: Upload J2ME App
         uses: actions/upload-artifact@v4
         with:
-          name: Sikkha48-Java-v2.48
+          name: Sikkha48-FeaturePhone-JAR
           path: Sikkha48.jar
