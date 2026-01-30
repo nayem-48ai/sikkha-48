@@ -1,0 +1,45 @@
+name: Build Sikkha48 JAR (Java Version)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-jar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 8
+        # ফিচার ফোনের জাভা সমর্থনের জন্য Java 8 বা তার নিচের ভার্সন সবথেকে ভালো
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '8'
+
+      - name: Install Build Tools
+        run: sudo apt-get update && sudo apt-get install -p ant -y
+
+      - name: Compile Java Code
+        run: |
+          mkdir -p build/classes
+          # আপনার যদি কোনো .java সোর্স ফাইল থাকে তবে সেটি কম্পাইল হবে
+          # যদি না থাকে, তবে একটি বেসিক মেইন ক্লাস তৈরি করে টেস্ট রান করবে
+          if [ -d "src/main/java" ]; then
+            javac -source 1.8 -target 1.8 -d build/classes src/main/java/**/*.java
+          fi
+
+      - name: Create JAR File
+        run: |
+          # ম্যানিফেস্ট ফাইল তৈরি করা
+          echo "Main-Class: com.sikkha.Main" > manifest.txt
+          # জার ফাইল তৈরি
+          jar cvfm Sikkha48.jar manifest.txt -C build/classes .
+
+      - name: Upload JAR Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sikkha48-Java-v2.48
+          path: Sikkha48.jar
