@@ -6,10 +6,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       base: './',
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
-      },
+      server: { host: '0.0.0.0', allowedHosts: true },
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),

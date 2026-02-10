@@ -1,4 +1,4 @@
-name: Final Fix - Unzip, Config and Deploy
+name: Tnayem48 Preview Engine
 
 on:
   push:
@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  preview-engine:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -23,51 +23,75 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Extract Zip
+      - name: Extract Project
         run: |
-          ZIP_FILE=$(ls *.zip | head -n 1)
+          ZIP_FILE=$(ls *.zip 2>/dev/null | head -n 1) || true
           if [ -f "$ZIP_FILE" ]; then
             unzip -o "$ZIP_FILE" -d .
             rm "$ZIP_FILE"
           fi
 
-      - name: Force Fix Vite Config
+      - name: Patch Vite Config
         run: |
           node -e "
           const fs = require('fs');
-          const filePath = fs.readdirSync('.').find(f => f.startsWith('vite.config.'));
-          if (filePath) {
-            let content = fs.readFileSync(filePath, 'utf8');
+          const file = fs.readdirSync('.').find(f => f.startsWith('vite.config.'));
+          if (file) {
+            let content = fs.readFileSync(file, 'utf8');
             if (!content.includes('base:')) {
               content = content.replace(/return\s*\{/, \"return {\n      base: './',\");
-              fs.writeFileSync(filePath, content);
-              console.log('Successfully fixed base path in ' + filePath);
             }
+            const serverConfig = \"server: { host: '0.0.0.0', allowedHosts: true },\";
+            if (content.includes('server:')) {
+              content = content.replace(/server\s*:\s*\{[\s\S]*?\},/, serverConfig);
+            } else {
+              content = content.replace(/return\s*\{/, \"return {\n      \" + serverConfig);
+            }
+            fs.writeFileSync(file, content);
           }
           "
 
-      - name: Save Changes to Main Branch
+      - name: Sync Repository
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git diff --quiet && git diff --staged --quiet || (git commit -m "fix: added base path for github pages" && git push origin main)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "fix: preview sync" && git push origin main)
 
-      - name: Install and Build
+      - name: Install Packages
+        run: npm install
+
+      - name: Live Dev Preview (@Tnayem48)
         run: |
-          npm install
-          npm run build
-          touch dist/.nojekyll
+          PORT=$(node -e "
+            const fs = require('fs');
+            try {
+              const file = fs.readdirSync('.').find(f => f.startsWith('vite.config.'));
+              const content = fs.readFileSync(file, 'utf8');
+              const match = content.match(/port\s*:\s*(\d+)/);
+              console.log(match ? match[1] : 3000);
+            } catch (e) { console.log(3000); }
+          ")
 
-      - name: Fetch and Add README for Deploy Branch
-        run: |
-          # আপনার দেওয়া লিঙ্ক থেকে ফাইলটি ডাউনলোড করে dist ফোল্ডারে README.md নামে রাখা হচ্ছে
-          curl -L https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/README.md -o dist/README.md
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: tnx-bd #tnx-bd নামেই নতুন ব্রাঞ্চ তৈরি হবে।
-          force_orphan: true
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          
+          npm run dev -- --host 0.0.0.0 --port $PORT & 
+          
+          sleep 10
+          
+          echo "------------------------------------------------------------"
+          echo "🔍 SEARCHING FOR PREVIEW LINK..."
+          echo "⚠️  লিঙ্কটি চালু হতে ১০-১৫ সেকেন্ড সময় নিতে পারে।"
+          
+          timeout 10m cloudflared tunnel --url http://localhost:$PORT 2>&1 | tee /tmp/cf.log | grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" &
+          
+          sleep 12
+          echo ""
+          echo "🚀 YOUR PREVIEW LINK:"
+          grep -oE "https://[a-zA-Z0-9.-]+\.trycloudflare\.com" /tmp/cf.log | head -n 1
+          echo ""
+          echo "Copyright © Tnayem48"
+          echo "------------------------------------------------------------"
+          
+          sleep 10m || true
