@@ -1,27 +1,21 @@
-name: Tnayem48 Universal Runner
+name: Final Fix - Unzip, Config and Deploy
 
 on:
-  workflow_dispatch:
-    inputs:
-      action_type:
-        description: 'Select: build, remove, preview, or unzip'
-        required: true
-        default: 'build'
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
-  universal-execute:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
@@ -29,39 +23,51 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Fetch and Run Remote Logic
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTION_TYPE: ${{ github.event.inputs.action_type || 'build' }}
+      - name: Extract Zip
         run: |
-          # ১. লিঙ্ক থেকে রিমোট ফাইল ডাউনলোড (ফাইল নেম ডাইনামিক)
-          BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
-          curl -sL "$BASE_URL/$ACTION_TYPE" -o remote_wf.yml
-          
-          # ২. গিট কনফিগ
+          ZIP_FILE=$(ls *.zip | head -n 1)
+          if [ -f "$ZIP_FILE" ]; then
+            unzip -o "$ZIP_FILE" -d .
+            rm "$ZIP_FILE"
+          fi
+
+      - name: Force Fix Vite Config
+        run: |
+          node -e "
+          const fs = require('fs');
+          const filePath = fs.readdirSync('.').find(f => f.startsWith('vite.config.'));
+          if (filePath) {
+            let content = fs.readFileSync(filePath, 'utf8');
+            if (!content.includes('base:')) {
+              content = content.replace(/return\s*\{/, \"return {\n      base: './',\");
+              fs.writeFileSync(filePath, content);
+              console.log('Successfully fixed base path in ' + filePath);
+            }
+          }
+          "
+
+      - name: Save Changes to Main Branch
+        run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git add .
+          git diff --quiet && git diff --staged --quiet || (git commit -m "fix: added base path for github pages" && git push origin main)
 
-          # ৩. পাইথন দিয়ে YAML থেকে শুধু 'run' ব্লকগুলো নিখুঁতভাবে বের করা
-          python3 -c "
-          import yaml, os
-          try:
-              with open('remote_wf.yml', 'r') as f:
-                  data = yaml.safe_load(f)
-                  for job in data.get('jobs', {}).values():
-                      for step in job.get('steps', []):
-                          if 'run' in step:
-                              print(step['run'])
-          except Exception as e:
-              print(f'Error parsing YAML: {e}')
-          " > execute_me.sh
+      - name: Install and Build
+        run: |
+          npm install
+          npm run build
+          touch dist/.nojekyll
 
-          # ৪. ফাইলটি এক্সিকিউট করা
-          if [ -s execute_me.sh ]; then
-            chmod +x execute_me.sh
-            bash execute_me.sh
-          else
-            echo "Error: No executable commands found in remote file!"
-            exit 1
-          fi
+      - name: Fetch and Add README for Deploy Branch
+        run: |
+          # আপনার দেওয়া লিঙ্ক থেকে ফাইলটি ডাউনলোড করে dist ফোল্ডারে README.md নামে রাখা হচ্ছে
+          curl -L https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/README.md -o dist/README.md
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: tnx-bd #tnx-bd নামেই নতুন ব্রাঞ্চ তৈরি হবে।
+          force_orphan: true
