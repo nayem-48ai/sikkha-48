@@ -4,43 +4,64 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'Select Action to Perform'
+        description: 'Select: build, remove, preview, or unzip'
         required: true
         default: 'build'
-        type: choice
-        options:
-          - build
-          - remove
-          - preview
-          - unzip
+  push:
+    branches:
+      - main
 
 jobs:
-  execute-logic:
+  universal-execute:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pages: write
-      id-token: write
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download & Execute Script
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch and Run Remote Logic
         env:
-          ACTION_URL: "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/${{ github.event.inputs.action_type }}"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION_TYPE: ${{ github.event.inputs.action_type || 'build' }}
         run: |
-          # স্ক্রিপ্ট ডাউনলোড
-          curl -sL "$ACTION_URL" -o runner_script.sh
-          chmod +x runner_script.sh
+          # ১. লিঙ্ক থেকে রিমোট ফাইল ডাউনলোড (ফাইল নেম ডাইনামিক)
+          BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
+          curl -sL "$BASE_URL/$ACTION_TYPE" -o remote_wf.yml
           
-          # গিট সেটআপ (কমন কাজের জন্য)
+          # ২. গিট কনফিগ
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          
-          # রান করা
-          bash runner_script.sh
+
+          # ৩. পাইথন দিয়ে YAML থেকে শুধু 'run' ব্লকগুলো নিখুঁতভাবে বের করা
+          python3 -c "
+          import yaml, os
+          try:
+              with open('remote_wf.yml', 'r') as f:
+                  data = yaml.safe_load(f)
+                  for job in data.get('jobs', {}).values():
+                      for step in job.get('steps', []):
+                          if 'run' in step:
+                              print(step['run'])
+          except Exception as e:
+              print(f'Error parsing YAML: {e}')
+          " > execute_me.sh
+
+          # ৪. ফাইলটি এক্সিকিউট করা
+          if [ -s execute_me.sh ]; then
+            chmod +x execute_me.sh
+            bash execute_me.sh
+          else
+            echo "Error: No executable commands found in remote file!"
+            exit 1
+          fi
