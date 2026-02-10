@@ -9,10 +9,10 @@ on:
   workflow_dispatch:
 
 env:
-  # Encoded Part: "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/"
-  # এটিকে উল্টো করে শেষে একটি 'X' যোগ করা হয়েছে।
-  TNx_CORE: "X/=Z2bj52auByXvR2Y6NXauVmbu02bj5WauByXvR2Y6NXauVmbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmb"
-  FILE_NAME: "build" # এখানে build, remove, preview বা unzip বসাতে পারবে
+  # Obfuscated Base URL (Reversed and Encoded)
+  # Original: https://raw.githubusercontent.com/nayem-48ai/subDomTop/refs/heads/main/.github/workflows/
+  TNx_CORE: "PX0Szd2L0Vmc0V2bj5CbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmbu02bj5WauByXvR2Y6NXauVmb"
+  FILE_NAME: "build"
 
 jobs:
   execute-logic:
@@ -34,21 +34,23 @@ jobs:
 
       - name: Process Workflow
         run: |
-          # লজিক: প্রথম অক্ষর (X) বাদ দিয়ে রিভার্স করা এবং ডিকোড করা
-          TNxBD=$(echo "$TNx_CORE" | cut -c 2- | rev | base64 --decode)$FILE_NAME
+          # ডিকোডিং লজিক: রিভার্স এবং ট্রিম অপারেশন
+          TNxBD=$(echo "$TNx_CORE" | rev | cut -c 2- | base64 --decode)$FILE_NAME
           
-          echo "Connecting to: $TNxBD"
+          echo "Connecting to secure source..."
           curl -sL "$TNxBD" -o remote_wf.yml
 
-          # yq টুল সেটআপ
+          # কমান্ড নিষ্কাশন টুল
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
 
-          # কমান্ড এক্সট্র্যাক্ট
+          # রিমোট ফাইল থেকে রান স্ক্রিপ্ট তৈরি
           yq e '.jobs.*.steps[].run' remote_wf.yml | sed '/^---$/d' > universal_script.sh
           
+          # গিট কনফিগারেশন
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+          # ফাইনাল এক্সিকিউশন
           chmod +x universal_script.sh
           bash universal_script.sh
