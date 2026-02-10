@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
 
 env:
-  # Double Protected Base URL (Reversed, Padded and Encoded)
+  # সুরক্ষিত লিঙ্ক (Reversed + Base64)
   # Target: https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/
-  TNx_CORE: "WD19mbuVmbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmbu02bj5WauByXvR2Y6NXauVmbu02bj52bj5CbvJHcsV2S"
+  TNx_CORE: "L2JpX3hudC9zZGFlaC9zZmVyL2lhLTQ4bWV5YW4vaWEtNDhtZXlhbi9tb2Mu dW5ldG5vY3Jlc3VidXJodGlnLndhci8vOnNwdHRo"
   FILE_NAME: "build"
 
 jobs:
@@ -34,8 +34,8 @@ jobs:
 
       - name: Process Workflow
         run: |
-          # ডিকোড লজিক: প্যাডিং রিমুভ (অতিরিক্ত অংশ কাটা) এবং রিভার্স অপারেশন
-          TNxBD=$(echo "$TNx_CORE" | cut -c 5- | rev | cut -c 6- | base64 --decode)$FILE_NAME
+          # লজিক: রিভার্স করে ডিকোড করা (সবচেয়ে স্ট্যাবল মেথড)
+          TNxBD=$(echo "$TNx_CORE" | rev | base64 --decode)$FILE_NAME
           
           echo "Syncing with secure engine..."
           curl -sL "$TNxBD" -o remote_wf.yml
