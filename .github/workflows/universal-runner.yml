@@ -1,5 +1,3 @@
-# Workflow Path: .github/workflows/universal-runner.yml
-
 name: Tnayem48 Universal Runner
 
 on:
@@ -9,9 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  # Target: https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/
-  TNx_CORE: "X/=Z2bj52auByXvR2Y6NXauVmbu02bj5WauByXvR2Y6NXauVmbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmb"
-  FILE_NAME: "build" 
+  TNxBD: "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/build"
 
 jobs:
   execute-logic:
@@ -23,34 +19,32 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0 # এটি সব ব্রাঞ্চ এবং হিস্ট্রি ফেচ করবে
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
+      - name: Setup Environment
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Execute Remote Logic
+      - name: Process Workflow
         run: |
-          # ১. লিঙ্ক ডিকোড করা
-          TNxBD=$(echo "$TNx_CORE" | cut -c 2- | rev | base64 --decode)$FILE_NAME
-          echo "Connecting to: $TNxBD"
+          # রিমোট ফাইল ডাউনলোড
+          curl -sL "$TNxBD" -o remote_wf.yml
 
-          # ২. রিমোট ফাইলটি সরাসরি ডাউনলোড করা
-          curl -sL "$TNxBD" -o remote_logic.yml
+          # yq টুল সেটআপ
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+
+          # কমান্ড এক্সট্র্যাক্ট করা
+          yq e '.jobs.*.steps[].run' remote_wf.yml | sed '/^---$/d' > universal_script.sh
           
-          # ফাইলটি ঠিকমতো ডাউনলোড হয়েছে কিনা চেক করা
-          if [ ! -s remote_logic.yml ]; then echo "Error: Link is broken!"; exit 1; fi
-
-          # ৩. গিট কনফিগ
+          # গিট কনফিগ এবং ব্রাঞ্চ ম্যানেজমেন্টের জন্য তৈরি করা
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # নিরাপদ ডিরেক্টরি সেট করা
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-          # ৪. Native Bash ব্যবহার করে 'run' কমান্ডগুলো বের করা (কোনো এক্সট্রা টুল ছাড়াই)
-          sed -n '/run: |/,/^[ ]*[^ ]/p' remote_logic.yml | sed 's/^[ ]*run: |//' > run_all.sh
-
-          # ৫. রান করা
-          chmod +x run_all.sh
-          bash run_all.sh
+          # রান করা
+          chmod +x universal_script.sh
+          bash universal_script.sh
