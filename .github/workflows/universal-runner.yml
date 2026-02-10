@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  TNxBD: "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/preview"
+  TNxBD: "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/build"
 
 jobs:
   execute-logic:
