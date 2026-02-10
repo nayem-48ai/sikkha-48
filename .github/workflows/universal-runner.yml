@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'Select Workflow Action'
+        description: 'Select Action'
         required: true
         default: 'build'
         type: choice
@@ -37,43 +37,41 @@ jobs:
 
       - name: Virtual Execution Engine
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTION_TYPE: ${{ github.event.inputs.action_type || 'build' }}
         run: |
-          # ১. লিঙ্ক থেকে ফাইলটি মেমোরিতে আনা
           BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
-          REMOTE_CONTENT=$(curl -sL "$BASE_URL/$ACTION_TYPE")
-
-          # ২. পাইথন দিয়ে রান ব্লকগুলো বের করা এবং 'uses' এর বিকল্প লজিক ইনজেক্ট করা
-          python3 -c "
-          import yaml, sys, os
-
-          content = os.getenv('REMOTE_CONTENT', '')
-          data = yaml.safe_load(content)
           
-          # কমন গিট কনফিগ
-          print('git config --global user.name \"github-actions[bot]\"')
-          print('git config --global user.email \"github-actions[bot]@users.noreply.github.com\"')
-          print('git config --global --add safe.directory \"$GITHUB_WORKSPACE\"')
+          # মেমোরিতে প্রসেস করে সরাসরি রান করা
+          curl -sL "$BASE_URL/$ACTION_TYPE" | python3 -c "
+          import yaml, sys, subprocess, os
 
-          for job in data.get('jobs', {}).values():
-              for step in job.get('steps', []):
-                  # সরাসরি রান কমান্ড থাকলে সেটি প্রিন্ট করা
-                  if 'run' in step:
-                      print(step['run'])
-                  
-                  # যদি peaceiris/actions-gh-pages থাকে, তবে তার বিকল্প ব্যাশ লজিক
-                  if 'uses' in step and 'peaceiris/actions-gh-pages' in step['uses']:
-                      target_branch = step.get('with', {}).get('publish_branch', 'tnx-bd')
-                      target_dir = step.get('with', {}).get('publish_dir', './dist')
-                      print(f'''
-                      echo \"🚀 Virtual Deploying to branch: {target_branch}\"
-                      cd {target_dir}
-                      git init
-                      git config user.name \"github-actions[bot]\"
-                      git config user.email \"github-actions[bot]@users.noreply.github.com\"
-                      git add .
-                      git commit -m \"deploy: auto-generated from universal runner\"
-                      git push --force \"https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git\" master:{target_branch}
-                      ''')
-          " | bash
+          def run_bash(script):
+              # Deploy অ্যাকশন থাকলে সেটাকে গিট কমান্ড দিয়ে রিপ্লেস করা
+              if 'peaceiris/actions-gh-pages' in script or 'Deploy to GitHub Pages' in script:
+                  deploy_script = \"\"\"
+                  cd dist
+                  git init
+                  git config user.name 'github-actions[bot]'
+                  git config user.email 'github-actions[bot]@users.noreply.github.com'
+                  git add .
+                  git commit -m 'deploy: virtual build push'
+                  git push --force https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git master:tnx-bd
+                  \"\"\"
+                  subprocess.run(['bash', '-c', deploy_script], check=True)
+              else:
+                  subprocess.run(['bash', '-c', script], check=True)
+
+          try:
+              data = yaml.safe_load(sys.stdin)
+              for job in data.get('jobs', {}).values():
+                  for step in job.get('steps', []):
+                      if 'run' in step:
+                          run_bash(step['run'])
+                      # যদি step-এ deploy অ্যাকশন থাকে তবে সরাসরি ডিস্ট ফোল্ডার পুশ করবে
+                      elif 'uses' in step and 'actions-gh-pages' in step['uses']:
+                          run_bash('peaceiris/actions-gh-pages')
+          except Exception as e:
+              print(f'Error: {e}')
+              sys.exit(1)
+          "
