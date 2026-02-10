@@ -1,5 +1,3 @@
-null
-null
 ZIP_FILE=$(ls *.zip | head -n 1)
 if [ -f "$ZIP_FILE" ]; then
   unzip -o "$ZIP_FILE" -d .
@@ -31,4 +29,3 @@ touch dist/.nojekyll
 # আপনার দেওয়া লিঙ্ক থেকে ফাইলটি ডাউনলোড করে dist ফোল্ডারে README.md নামে রাখা হচ্ছে
 curl -L https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/README.md -o dist/README.md
 
-null
