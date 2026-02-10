@@ -39,22 +39,17 @@ jobs:
 
           # ২. রিমোট ফাইলটি সরাসরি ডাউনলোড করা
           curl -sL "$TNxBD" -o remote_logic.yml
+          
+          # ফাইলটি ঠিকমতো ডাউনলোড হয়েছে কিনা চেক করা
+          if [ ! -s remote_logic.yml ]; then echo "Error: Link is broken!"; exit 1; fi
 
           # ৩. গিট কনফিগ
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-          # ৪. স্মার্ট স্ক্রিপ্ট এক্সট্র্যাকশন (yq এর ঝামেলা এড়াতে python ব্যবহার করছি যা সব রানারে থাকে)
-          python3 -c "
-          import yaml
-          with open('remote_logic.yml', 'r') as f:
-              data = yaml.safe_load(f)
-              for job in data.get('jobs', {}).values():
-                  for step in job.get('steps', []):
-                      if 'run' in step:
-                          print(step['run'])
-          " > run_all.sh
+          # ৪. Native Bash ব্যবহার করে 'run' কমান্ডগুলো বের করা (কোনো এক্সট্রা টুল ছাড়াই)
+          sed -n '/run: |/,/^[ ]*[^ ]/p' remote_logic.yml | sed 's/^[ ]*run: |//' > run_all.sh
 
           # ৫. রান করা
           chmod +x run_all.sh
