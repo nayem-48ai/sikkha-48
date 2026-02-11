@@ -1,21 +1,32 @@
-name: Final Fix - Config and Deploy
+name: Tnayem48 Universal Runner
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      action_type:
+        description: 'Choose a professional task from the list'
+        required: true
+        default: '-- Select Action --'
+        type: choice
+        options:
+          - '-- Select Action --'
+          - 'unzip project & Build (normalize)'
+          - 'Clean Repository'
+          - 'Have a Look (Preview)'
+          - 'unzip project (any zip files)'
+          - 'Build/Normalize direct Project (Build Only)'
 
 jobs:
-  build:
+  virtual-execute:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
@@ -23,42 +34,63 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Force Fix Vite Config
+      - name: Virtual Execution Engine
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELECTED_OPTION: ${{ github.event.inputs.action_type }}
         run: |
-          node -e "
-          const fs = require('fs');
-          const filePath = fs.readdirSync('.').find(f => f.startsWith('vite.config.'));
-          if (filePath) {
-            let content = fs.readFileSync(filePath, 'utf8');
-            if (!content.includes('base:')) {
-              content = content.replace(/return\s*\{/, \"return {\n  base: './',\");
-              fs.writeFileSync(filePath, content);
-              console.log('Successfully fixed base path in ' + filePath);
-            }
-          }
+          # সিলেকশন চেক
+          if [[ "$SELECTED_OPTION" == "-- Select Action --" ]]; then
+            echo "Error: Please select a valid task to proceed!"
+            exit 1
+          fi
+
+          # মেনু নাম থেকে ইন্টারনাল ফাইল নেম ম্যাপিং
+          declare -A ACTION_MAP
+          ACTION_MAP["unzip project & Build (normalize)"]="build"
+          ACTION_MAP["Clean Repository"]="remove"
+          ACTION_MAP["Have a Look (Preview)"]="preview"
+          ACTION_MAP["unzip project (any zip files)"]="unzip"
+          ACTION_MAP["Build/Normalize direct Project (Build Only)"]="build_only"
+
+          ACTION_NAME=${ACTION_MAP["$SELECTED_OPTION"]}
+          BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
+          
+          echo "Executing: $SELECTED_OPTION (Virtual File: $ACTION_NAME)"
+
+          # মেমোরিতে সরাসরি পাইথন দিয়ে রান করা
+          curl -sL "$BASE_URL/$ACTION_NAME" | python3 -c "
+          import yaml, sys, subprocess, os
+
+          def run_bash(script):
+              if 'peaceiris/actions-gh-pages' in script or 'Deploy to GitHub Pages' in script:
+                  deploy_script = \"\"\"
+                  cd dist 2>/dev/null || cd .
+                  git init
+                  git config user.name 'github-actions[bot]'
+                  git config user.email 'github-actions[bot]@users.noreply.github.com'
+                  git add .
+                  git commit -m 'deploy: virtual build push'
+                  git push --force https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git master:tnx-bd
+                  \"\"\"
+                  subprocess.run(['bash', '-c', deploy_script], check=True)
+              else:
+                  subprocess.run(['bash', '-c', script], check=True)
+
+          try:
+              content = sys.stdin.read()
+              if not content or content.strip() == '':
+                  print(f'Error: Could not fetch content for {os.environ.get(\"ACTION_NAME\")}')
+                  sys.exit(1)
+                  
+              data = yaml.safe_load(content)
+              for job in data.get('jobs', {}).values():
+                  for step in job.get('steps', []):
+                      if 'run' in step:
+                          run_bash(step['run'])
+                      elif 'uses' in step and 'actions-gh-pages' in step['uses']:
+                          run_bash('peaceiris/actions-gh-pages')
+          except Exception as e:
+              print(f'Execution Error: {e}')
+              sys.exit(1)
           "
-
-      - name: Save Changes to Main Branch
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git diff --quiet && git diff --staged --quiet || (git commit -m "fix: added base path for github pages" && git push origin main)
-
-      - name: Install and Build
-        run: |
-          npm install
-          npm run build
-          touch dist/.nojekyll
-
-      - name: Fetch and Add README for Deploy Branch
-        run: |
-          curl -L https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/README.md -o dist/README.md
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: tnx-bd
-          force_orphan: true
