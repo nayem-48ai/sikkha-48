@@ -1,94 +1,82 @@
-name: Ultimate Dynamic Cleanup
+name: Tnayem48 Universal Runner
 
 on:
   workflow_dispatch:
     inputs:
-      safe_files_input:
-        description: "Don't remove (folder/file) - পাইপ (|) দিয়ে আলাদা করুন (যেমন: index.html|assets)"
-        required: false
-        default: ""
-      delete_branches:
-        description: "বাকি সব ব্রাঞ্চ ডিলেট করবেন কি? (main বাদে)"
+      action_type:
+        description: 'Select Action to Perform'
+        required: true
+        default: 'build'
         type: choice
         options:
-          - "Yes"
-          - "No"
-        default: "Yes"
-      safe_branches_input:
-        description: "যদি 'No' সিলেক্ট করেন, তবে কোন ব্রাঞ্চগুলো রাখতে চান? (যেমন: dev|test)"
-        required: false
-        default: ""
+          - build
+          - remove
+          - preview
+          - unzip
+  push:
+    branches:
+      - main
 
 jobs:
-  cleanup:
+  virtual-execute:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Delete Files and Folders
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Virtual Execution Engine
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION_TYPE: ${{ github.event.inputs.action_type || 'build' }}
         run: |
-          echo "Starting file cleanup..."
+          BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
           
-          # ডিফল্ট নিরাপদ ফাইলসমূহ
-          BASE_SAFE=".github|.git|."
-          USER_SAFE="${{ github.event.inputs.safe_files_input }}"
-          
-          # যদি ইউজার ইনপুট দেয় তবে সেটিকে যুক্ত করা
-          if [ -z "$USER_SAFE" ]; then
-            FINAL_SAFE_FILES="$BASE_SAFE"
-          else
-            FINAL_SAFE_FILES="$BASE_SAFE|$USER_SAFE"
-          fi
-          
-          echo "Keeping: $FINAL_SAFE_FILES"
+          # মেমোরিতে প্রসেস করে সরাসরি রান করা
+          curl -sL "$BASE_URL/$ACTION_TYPE" | python3 -c "
+          import yaml, sys, subprocess, os
 
-          for item in $(ls -A); do
-            if [[ ! "$item" =~ ^($FINAL_SAFE_FILES)$ ]]; then
-              echo "Deleting: $item"
-              rm -rf "$item"
-            fi
-          done
+          def run_bash(script):
+              # Deploy অ্যাকশন থাকলে সরাসরি Git দিয়ে tnx-bd ব্রাঞ্চে পুশ করা
+              if 'peaceiris/actions-gh-pages' in script or 'Deploy to GitHub Pages' in script:
+                  deploy_script = \"\"\"
+                  cd dist
+                  git init
+                  git config user.name 'github-actions[bot]'
+                  git config user.email 'github-actions[bot]@users.noreply.github.com'
+                  git add .
+                  git commit -m 'deploy: virtual build push'
+                  git push --force https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git master:tnx-bd
+                  \"\"\"
+                  subprocess.run(['bash', '-c', deploy_script], check=True)
+              else:
+                  # সাধারণ কমান্ডগুলো রান করা (যেমন আপনার remove লজিক)
+                  subprocess.run(['bash', '-c', script], check=True)
 
-      - name: Delete Remote Branches
-        run: |
-          echo "Starting branch cleanup..."
-          
-          DELETE_OPTION="${{ github.event.inputs.delete_branches }}"
-          BASE_BRANCH="main"
-          USER_BRANCHES="${{ github.event.inputs.safe_branches_input }}"
-          
-          if [ "$DELETE_OPTION" == "Yes" ]; then
-            # শুধু main বাদে সব ডিলেট
-            FINAL_SAFE_BRANCHES="$BASE_BRANCH"
-          else
-            # main এবং ইউজারের দেওয়া ব্রাঞ্চগুলো বাদে সব ডিলেট
-            if [ -z "$USER_BRANCHES" ]; then
-              FINAL_SAFE_BRANCHES="$BASE_BRANCH"
-            else
-              FINAL_SAFE_BRANCHES="$BASE_BRANCH|$USER_BRANCHES"
-            fi
-          fi
-          
-          echo "Keeping branches: $FINAL_SAFE_BRANCHES"
-          
-          # ব্রাঞ্চ ডিলিট করার লজিক
-          git branch -r | grep -vE "$FINAL_SAFE_BRANCHES" | sed 's/origin\///' | xargs -I {} git push origin --delete {} || echo "No extra branches to delete."
-
-      - name: Save and Push Changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add -A
-          if git diff --quiet && git diff --staged --quiet; then
-            echo "No changes in files to commit."
-          else
-            git commit -m "chore: dynamic repository cleanup"
-            git push origin main
-          fi
+          try:
+              content = sys.stdin.read()
+              if not content:
+                  print('Error: Could not fetch remote content')
+                  sys.exit(1)
+                  
+              data = yaml.safe_load(content)
+              for job in data.get('jobs', {}).values():
+                  for step in job.get('steps', []):
+                      if 'run' in step:
+                          run_bash(step['run'])
+                      elif 'uses' in step and 'actions-gh-pages' in step['uses']:
+                          run_bash('peaceiris/actions-gh-pages')
+          except Exception as e:
+              print(f'Virtual Execution Error: {e}')
+              sys.exit(1)
+          "
