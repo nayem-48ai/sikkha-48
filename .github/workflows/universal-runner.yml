@@ -1,77 +1,81 @@
-name: Tnayem48 Universal Runner
+name: Dynamic Repository Cleanup
 
 on:
   workflow_dispatch:
     inputs:
-      action_type:
-        description: 'Select Action'
+      target_branch:
+        description: 'কোন ব্রাঞ্চে ফাইল ক্লিনআপ করতে চান?'
         required: true
-        default: 'build'
+        default: 'main'
+        type: string
+      safe_files_input:
+        description: "don't remove (folder/file) - নামগুলোর মাঝে | চিহ্ন দিন"
+        required: false
+        default: 'README.md|index.html'
+      delete_other_branches:
+        description: 'অন্যান্য সব ব্রাঞ্চ কি ডিলিট করবেন?'
+        required: true
         type: choice
         options:
-          - build
-          - remove
-          - preview
-          - unzip
-  push:
-    branches:
-      - main
+          - 'No'
+          - 'Yes'
+        default: 'No'
 
 jobs:
-  virtual-execute:
+  cleanup:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.target_branch }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Virtual Execution Engine
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTION_TYPE: ${{ github.event.inputs.action_type || 'build' }}
+      - name: Delete Files and Folders
         run: |
-          BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
+          echo "Cleaning up files in branch: ${{ github.event.inputs.target_branch }}..."
           
-          # মেমোরিতে প্রসেস করে সরাসরি রান করা
-          curl -sL "$BASE_URL/$ACTION_TYPE" | python3 -c "
-          import yaml, sys, subprocess, os
+          # ইউজার ইনপুট এবং ডিফল্ট সুরক্ষিত ফাইলগুলো যোগ করা হচ্ছে
+          # .github, .git এবং . সবসময় সুরক্ষিত থাকবে
+          USER_SAFE="${{ github.event.inputs.safe_files_input }}"
+          CORE_SAFE=".github|.git|."
+          
+          if [ -z "$USER_SAFE" ]; then
+            SAFE_FILES="$CORE_SAFE"
+          else
+            SAFE_FILES="$CORE_SAFE|$USER_SAFE"
+          fi
+          
+          echo "Preserving: $SAFE_FILES"
 
-          def run_bash(script):
-              # Deploy অ্যাকশন থাকলে সেটাকে গিট কমান্ড দিয়ে রিপ্লেস করা
-              if 'peaceiris/actions-gh-pages' in script or 'Deploy to GitHub Pages' in script:
-                  deploy_script = \"\"\"
-                  cd dist
-                  git init
-                  git config user.name 'github-actions[bot]'
-                  git config user.email 'github-actions[bot]@users.noreply.github.com'
-                  git add .
-                  git commit -m 'deploy: virtual build push'
-                  git push --force https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git master:tnx-bd
-                  \"\"\"
-                  subprocess.run(['bash', '-c', deploy_script], check=True)
-              else:
-                  subprocess.run(['bash', '-c', script], check=True)
+          for item in $(ls -A); do
+            if [[ ! "$item" =~ ^($SAFE_FILES)$ ]]; then
+              echo "Deleting: $item"
+              rm -rf "$item"
+            fi
+          done
 
-          try:
-              data = yaml.safe_load(sys.stdin)
-              for job in data.get('jobs', {}).values():
-                  for step in job.get('steps', []):
-                      if 'run' in step:
-                          run_bash(step['run'])
-                      # যদি step-এ deploy অ্যাকশন থাকে তবে সরাসরি ডিস্ট ফোল্ডার পুশ করবে
-                      elif 'uses' in step and 'actions-gh-pages' in step['uses']:
-                          run_bash('peaceiris/actions-gh-pages')
-          except Exception as e:
-              print(f'Error: {e}')
-              sys.exit(1)
-          "
+      - name: Delete Remote Branches
+        if: ${{ github.event.inputs.delete_other_branches == 'Yes' }}
+        run: |
+          echo "Starting branch cleanup..."
+          # main ব্রাঞ্চ এবং বর্তমান টার্গেট ব্রাঞ্চ সুরক্ষিত থাকবে
+          SAFE_BRANCHES="main|${{ github.event.inputs.target_branch }}" 
+          
+          git branch -r | grep -vE "$SAFE_BRANCHES" | sed 's/origin\///' | xargs -I {} git push origin --delete {} || echo "No extra branches to delete."
+
+      - name: Save and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add -A
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: dynamic cleanup (kept: ${{ github.event.inputs.safe_files_input }})"
+            git push origin ${{ github.event.inputs.target_branch }}
+          fi
