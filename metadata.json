@@ -1,7 +1,0 @@
-{
-  "name": "Sikkha48 Pro",
-  "description": "Premium online exam system with real-time analytics and glassmorphism design.",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}
