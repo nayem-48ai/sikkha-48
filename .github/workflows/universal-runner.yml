@@ -1,25 +1,23 @@
-name: Dynamic Repository Cleanup
+name: Ultimate Dynamic Cleanup
 
 on:
   workflow_dispatch:
     inputs:
-      target_branch:
-        description: 'কোন ব্রাঞ্চে ফাইল ক্লিনআপ করতে চান?'
-        required: true
-        default: 'main'
-        type: string
       safe_files_input:
-        description: "don't remove (folder/file) - নামগুলোর মাঝে | চিহ্ন দিন"
+        description: "Don't remove (folder/file) - পাইপ (|) দিয়ে আলাদা করুন (যেমন: index.html|assets)"
         required: false
-        default: 'README.md|index.html'
-      delete_other_branches:
-        description: 'অন্যান্য সব ব্রাঞ্চ কি ডিলিট করবেন?'
-        required: true
+        default: ""
+      delete_branches:
+        description: "বাকি সব ব্রাঞ্চ ডিলেট করবেন কি? (main বাদে)"
         type: choice
         options:
-          - 'No'
-          - 'Yes'
-        default: 'No'
+          - "Yes"
+          - "No"
+        default: "Yes"
+      safe_branches_input:
+        description: "যদি 'No' সিলেক্ট করেন, তবে কোন ব্রাঞ্চগুলো রাখতে চান? (যেমন: dev|test)"
+        required: false
+        default: ""
 
 jobs:
   cleanup:
@@ -31,41 +29,56 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.target_branch }}
           fetch-depth: 0
 
       - name: Delete Files and Folders
         run: |
-          echo "Cleaning up files in branch: ${{ github.event.inputs.target_branch }}..."
+          echo "Starting file cleanup..."
           
-          # ইউজার ইনপুট এবং ডিফল্ট সুরক্ষিত ফাইলগুলো যোগ করা হচ্ছে
-          # .github, .git এবং . সবসময় সুরক্ষিত থাকবে
+          # ডিফল্ট নিরাপদ ফাইলসমূহ
+          BASE_SAFE=".github|.git|."
           USER_SAFE="${{ github.event.inputs.safe_files_input }}"
-          CORE_SAFE=".github|.git|."
           
+          # যদি ইউজার ইনপুট দেয় তবে সেটিকে যুক্ত করা
           if [ -z "$USER_SAFE" ]; then
-            SAFE_FILES="$CORE_SAFE"
+            FINAL_SAFE_FILES="$BASE_SAFE"
           else
-            SAFE_FILES="$CORE_SAFE|$USER_SAFE"
+            FINAL_SAFE_FILES="$BASE_SAFE|$USER_SAFE"
           fi
           
-          echo "Preserving: $SAFE_FILES"
+          echo "Keeping: $FINAL_SAFE_FILES"
 
           for item in $(ls -A); do
-            if [[ ! "$item" =~ ^($SAFE_FILES)$ ]]; then
+            if [[ ! "$item" =~ ^($FINAL_SAFE_FILES)$ ]]; then
               echo "Deleting: $item"
               rm -rf "$item"
             fi
           done
 
       - name: Delete Remote Branches
-        if: ${{ github.event.inputs.delete_other_branches == 'Yes' }}
         run: |
           echo "Starting branch cleanup..."
-          # main ব্রাঞ্চ এবং বর্তমান টার্গেট ব্রাঞ্চ সুরক্ষিত থাকবে
-          SAFE_BRANCHES="main|${{ github.event.inputs.target_branch }}" 
           
-          git branch -r | grep -vE "$SAFE_BRANCHES" | sed 's/origin\///' | xargs -I {} git push origin --delete {} || echo "No extra branches to delete."
+          DELETE_OPTION="${{ github.event.inputs.delete_branches }}"
+          BASE_BRANCH="main"
+          USER_BRANCHES="${{ github.event.inputs.safe_branches_input }}"
+          
+          if [ "$DELETE_OPTION" == "Yes" ]; then
+            # শুধু main বাদে সব ডিলেট
+            FINAL_SAFE_BRANCHES="$BASE_BRANCH"
+          else
+            # main এবং ইউজারের দেওয়া ব্রাঞ্চগুলো বাদে সব ডিলেট
+            if [ -z "$USER_BRANCHES" ]; then
+              FINAL_SAFE_BRANCHES="$BASE_BRANCH"
+            else
+              FINAL_SAFE_BRANCHES="$BASE_BRANCH|$USER_BRANCHES"
+            fi
+          fi
+          
+          echo "Keeping branches: $FINAL_SAFE_BRANCHES"
+          
+          # ব্রাঞ্চ ডিলিট করার লজিক
+          git branch -r | grep -vE "$FINAL_SAFE_BRANCHES" | sed 's/origin\///' | xargs -I {} git push origin --delete {} || echo "No extra branches to delete."
 
       - name: Save and Push Changes
         run: |
@@ -74,8 +87,8 @@ jobs:
           
           git add -A
           if git diff --quiet && git diff --staged --quiet; then
-            echo "No changes to commit."
+            echo "No changes in files to commit."
           else
-            git commit -m "chore: dynamic cleanup (kept: ${{ github.event.inputs.safe_files_input }})"
-            git push origin ${{ github.event.inputs.target_branch }}
+            git commit -m "chore: dynamic repository cleanup"
+            git push origin main
           fi
