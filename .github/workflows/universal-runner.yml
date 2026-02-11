@@ -4,16 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'Choose a task from the list'
+        description: 'Choose a professional task from the list'
         required: true
         default: '-- Select Action --'
         type: choice
         options:
           - '-- Select Action --'
-          - build
-          - remove
-          - preview
-          - unzip
+          - 'unzip & Build (normalize)'
+          - 'Clean Repository'
+          - 'Have a Look (Preview)'
+          - 'unzip project (any zip files)'
+          - 'Build/Normalize Project (Build Only)'
 
 jobs:
   virtual-execute:
@@ -36,23 +37,35 @@ jobs:
       - name: Virtual Execution Engine
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTION_TYPE: ${{ github.event.inputs.action_type }}
+          SELECTED_OPTION: ${{ github.event.inputs.action_type }}
         run: |
-          # যদি ইউজার কোনো অ্যাকশন সিলেক্ট না করে তবে রান বন্ধ হবে
-          if [[ "$ACTION_TYPE" == "-- Select Action --" ]]; then
-            echo "Error: Please select a valid action (build, remove, preview, or unzip)!"
+          # সিলেকশন চেক
+          if [[ "$SELECTED_OPTION" == "-- Select Action --" ]]; then
+            echo "Error: Please select a valid task to proceed!"
             exit 1
           fi
 
+          # মেনু নাম থেকে ইন্টারনাল ফাইল নেম ম্যাপিং
+          declare -A ACTION_MAP
+          ACTION_MAP["unzip & Build (normalize)"]="build"
+          ACTION_MAP["Clean Repository"]="remove"
+          ACTION_MAP["Have a Look (Preview)"]="preview"
+          ACTION_MAP["unzip project (any zip files)"]="unzip"
+          ACTION_MAP["Build/Normalize Project (Build Only)"]="build_only"
+
+          ACTION_NAME=${ACTION_MAP["$SELECTED_OPTION"]}
           BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
           
-          curl -sL "$BASE_URL/$ACTION_TYPE" | python3 -c "
+          echo "Executing: $SELECTED_OPTION (Virtual File: $ACTION_NAME)"
+
+          # মেমোরিতে সরাসরি পাইথন দিয়ে রান করা
+          curl -sL "$BASE_URL/$ACTION_NAME" | python3 -c "
           import yaml, sys, subprocess, os
 
           def run_bash(script):
               if 'peaceiris/actions-gh-pages' in script or 'Deploy to GitHub Pages' in script:
                   deploy_script = \"\"\"
-                  cd dist
+                  cd dist 2>/dev/null || cd .
                   git init
                   git config user.name 'github-actions[bot]'
                   git config user.email 'github-actions[bot]@users.noreply.github.com'
@@ -66,8 +79,8 @@ jobs:
 
           try:
               content = sys.stdin.read()
-              if not content:
-                  print('Error: Could not fetch remote content from link')
+              if not content or content.strip() == '':
+                  print(f'Error: Could not fetch content for {os.environ.get(\"ACTION_NAME\")}')
                   sys.exit(1)
                   
               data = yaml.safe_load(content)
@@ -78,6 +91,6 @@ jobs:
                       elif 'uses' in step and 'actions-gh-pages' in step['uses']:
                           run_bash('peaceiris/actions-gh-pages')
           except Exception as e:
-              print(f'Virtual Execution Error: {e}')
+              print(f'Execution Error: {e}')
               sys.exit(1)
           "
