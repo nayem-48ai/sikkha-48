@@ -4,18 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       action_type:
-        description: 'Select Action to Perform'
+        description: 'Choose a task from the list'
         required: true
-        default: 'build'
+        default: '-- Select Action --'
         type: choice
         options:
+          - '-- Select Action --'
           - build
           - remove
           - preview
           - unzip
-  push:
-    branches:
-      - main
 
 jobs:
   virtual-execute:
@@ -38,16 +36,20 @@ jobs:
       - name: Virtual Execution Engine
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTION_TYPE: ${{ github.event.inputs.action_type || 'build' }}
+          ACTION_TYPE: ${{ github.event.inputs.action_type }}
         run: |
+          # যদি ইউজার কোনো অ্যাকশন সিলেক্ট না করে তবে রান বন্ধ হবে
+          if [[ "$ACTION_TYPE" == "-- Select Action --" ]]; then
+            echo "Error: Please select a valid action (build, remove, preview, or unzip)!"
+            exit 1
+          fi
+
           BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
           
-          # মেমোরিতে প্রসেস করে সরাসরি রান করা
           curl -sL "$BASE_URL/$ACTION_TYPE" | python3 -c "
           import yaml, sys, subprocess, os
 
           def run_bash(script):
-              # Deploy অ্যাকশন থাকলে সরাসরি Git দিয়ে tnx-bd ব্রাঞ্চে পুশ করা
               if 'peaceiris/actions-gh-pages' in script or 'Deploy to GitHub Pages' in script:
                   deploy_script = \"\"\"
                   cd dist
@@ -60,13 +62,12 @@ jobs:
                   \"\"\"
                   subprocess.run(['bash', '-c', deploy_script], check=True)
               else:
-                  # সাধারণ কমান্ডগুলো রান করা (যেমন আপনার remove লজিক)
                   subprocess.run(['bash', '-c', script], check=True)
 
           try:
               content = sys.stdin.read()
               if not content:
-                  print('Error: Could not fetch remote content')
+                  print('Error: Could not fetch remote content from link')
                   sys.exit(1)
                   
               data = yaml.safe_load(content)
