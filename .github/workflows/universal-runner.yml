@@ -34,13 +34,13 @@ jobs:
       - name: Update Guide README
         run: |
           # গাইড ফাইল ডাউনলোড এবং নির্দিষ্ট পাথে সেভ (রিপ্লেস করবে)
-          mkdir -p .github/workflows
-          curl -sL "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/Guide" -o .github/workflows/README.md
+          mkdir -p .github/
+          curl -sL "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/Guide" -o .github/README.md
           
           # গিট কনফিগ এবং পুশ
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/README.md
+          git add .github/README.md
           
           # শুধুমাত্র পরিবর্তন থাকলেই পুশ করবে
           git diff --quiet && git diff --staged --quiet || (git commit -m "docs: sync workflow guide" && git push origin main)
