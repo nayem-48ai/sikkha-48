@@ -16,7 +16,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          # ক্যাশ সরিয়ে দেওয়া হয়েছে যাতে lock file না থাকলেও এরর না দেয়
 
       - name: Install Dependencies
         run: npm install
@@ -47,7 +47,6 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '21'
-          cache: 'gradle'
 
       - name: Install Capacitor & Android Platform
         run: |
@@ -64,22 +63,24 @@ jobs:
             npx capacitor-assets generate --android
           fi
 
-          # AndroidX এবং UI ডিপেন্ডেন্সি যুক্ত করা
+          # AndroidX প্রোপ্রার্টিজ সেটআপ
           echo "android.useAndroidX=true" >> android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
           
-          # Android Manifest এ ইন্টারনেট পারমিশন নিশ্চিত করা
+          # পারমিশন অ্যাড করা
           sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
 
-          # ভার্সন কোড ও নাম আপডেট
+          # ভার্সন আপডেট
           sed -i "s/versionCode [0-9]*/versionCode ${{ steps.meta.outputs.code }}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"${{ steps.meta.outputs.version }}\"/" android/app/build.gradle
           
-          # Kotlin Conflict Fix এবং UI Constraint যুক্ত করা
+          # Kotlin এবং UI লাইব্রেরি ফিক্স
           sed -i '/dependencies {/a \    implementation("androidx.core:core-ktx:1.12.0")\n    constraints {\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22")\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22")\n    }' android/app/build.gradle
 
-          # MainActivity.java আপডেট (Responsive Status Bar & Back Navigation)
+          # MainActivity.java ফাইলটি তৈরি করা (Responsive + Back Button)
           PKG_PATH=$(echo "${{ steps.meta.outputs.package }}" | sed 's/\./\//g')
+          mkdir -p "android/app/src/main/java/$PKG_PATH"
+          
           cat <<EOF > "android/app/src/main/java/$PKG_PATH/MainActivity.java"
           package ${{ steps.meta.outputs.package }};
 
@@ -99,7 +100,6 @@ jobs:
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
 
-                  // স্ট্যাটাস বার ট্রান্সপারেন্ট করা
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                       Window window = getWindow();
                       window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -109,7 +109,7 @@ jobs:
                       }
                   }
 
-                  // Android 14/15 এর জন্য রেসপনসিভ প্যাডিং (Status Bar height অনুযায়ী)
+                  // Responsive Insets handling
                   View webView = getBridge().getWebView();
                   ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content), (v, windowInsets) -> {
                       int statusBarHeight = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
@@ -121,7 +121,7 @@ jobs:
               @Override
               public void onBackPressed() {
                   WebView webView = getBridge().getWebView();
-                  if (webView.canGoBack()) {
+                  if (webView != null && webView.canGoBack()) {
                       webView.goBack();
                   } else {
                       super.onBackPressed();
