@@ -1,114 +1,145 @@
-name: Tnayem48 Universal Runner
+name: Build Android APK (Responsive & Obfuscated)
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
-    inputs:
-      action_type:
-        description: 'Choose a professional task'
-        required: true
-        default: '-- Select Action --'
-        type: choice
-        options:
-          - '-- Select Action --'
-          - 'unzip & Build (normalize)'
-          - 'Clean Repository'
-          - 'Have a Look (Preview)'
-          - 'unzip project (any zip files)'
-          - 'Build/Normalize Project (Build Only)'
 
 jobs:
-  # ১. পুশ হওয়ার সাথে সাথে README তৈরি করার জব
-  setup-guide:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout Repository
+      - name: Checkout Source Code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update Guide README
-        run: |
-          # গাইড ফাইল ডাউনলোড এবং নির্দিষ্ট পাথে সেভ (রিপ্লেস করবে)
-          mkdir -p .github/
-          curl -sL "https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/Guide" -o .github/README.md
-          
-          # গিট কনফিগ এবং পুশ
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/README.md
-          
-          # শুধুমাত্র পরিবর্তন থাকলেই পুশ করবে
-          git diff --quiet && git diff --staged --quiet || (git commit -m "docs: sync workflow guide" && git push origin main)
-
-  # ২. আগের সব ফিচার অক্ষুণ্ণ রেখে ভার্চুয়াল রানার জব
-  virtual-execute:
-    # এটি শুধু ম্যানুয়ালি চালালে রান হবে (Select Action সিলেক্ট করলে)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
+          cache: 'npm'
 
-      - name: Virtual Execution Engine
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SELECTED_OPTION: ${{ github.event.inputs.action_type }}
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build React Project
+        run: npm run build
+
+      - name: Obfuscate JavaScript Files
         run: |
-          if [[ "$SELECTED_OPTION" == "-- Select Action --" ]]; then
-            echo "No action selected. Skipping execution."
-            exit 0
+          npm install -g javascript-obfuscator
+          javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true --string-array true --string-array-encoding 'base64' --string-array-threshold 0.75
+
+      - name: Extract App Metadata
+        id: meta
+        run: |
+          APP_NAME=$(jq -r '.appName' assets/app-metadata.json)
+          APP_PKG=$(jq -r '.appPackage' assets/app-metadata.json)
+          APP_VER=$(jq -r '.versionName' assets/app-metadata.json)
+          APP_CODE=$(jq -r '.versionCode' assets/app-metadata.json)
+          
+          echo "name=$APP_NAME" >> $GITHUB_OUTPUT
+          echo "package=$APP_PKG" >> $GITHUB_OUTPUT
+          echo "version=$APP_VER" >> $GITHUB_OUTPUT
+          echo "code=$APP_CODE" >> $GITHUB_OUTPUT
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Install Capacitor & Android Platform
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
+          if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
+            npx cap init "${{ steps.meta.outputs.name }}" ${{ steps.meta.outputs.package }} --web-dir dist
+          fi
+          npx cap add android || true
+          
+      - name: Configure App & Responsive UI
+        run: |
+          # আইকন জেনারেট
+          if [ -f "assets/icon.png" ]; then
+            npx capacitor-assets generate --android
           fi
 
-          declare -A ACTION_MAP
-          ACTION_MAP["unzip & Build (normalize)"]="build"
-          ACTION_MAP["Clean Repository"]="remove"
-          ACTION_MAP["Have a Look (Preview)"]="preview"
-          ACTION_MAP["unzip project (any zip files)"]="unzip"
-          ACTION_MAP["Build/Normalize Project (Build Only)"]="build_only"
-
-          ACTION_NAME=${ACTION_MAP["$SELECTED_OPTION"]}
-          BASE_URL="https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd"
+          # AndroidX এবং UI ডিপেন্ডেন্সি যুক্ত করা
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
           
-          curl -sL "$BASE_URL/$ACTION_NAME" | python3 -c "
-          import yaml, sys, subprocess, os
-          def run_bash(script):
-              if 'peaceiris/actions-gh-pages' in script or 'Deploy to GitHub Pages' in script:
-                  deploy_script = \"\"\"
-                  cd dist 2>/dev/null || cd .
-                  git init
-                  git config user.name 'github-actions[bot]'
-                  git config user.email 'github-actions[bot]@users.noreply.github.com'
-                  git add .
-                  git commit -m 'deploy: virtual build push'
-                  git push --force https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git master:tnx-bd
-                  \"\"\"
-                  subprocess.run(['bash', '-c', deploy_script], check=True)
-              else:
-                  subprocess.run(['bash', '-c', script], check=True)
+          # Android Manifest এ ইন্টারনেট পারমিশন নিশ্চিত করা
+          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
 
-          try:
-              content = sys.stdin.read()
-              if not content.strip(): sys.exit(0)
-              data = yaml.safe_load(content)
-              for job in data.get('jobs', {}).values():
-                  for step in job.get('steps', []):
-                      if 'run' in step: run_bash(step['run'])
-                      elif 'uses' in step and 'actions-gh-pages' in step['uses']: run_bash('peaceiris/actions-gh-pages')
-          except Exception as e:
-              print(f'Error: {e}'); sys.exit(1)
-          "
+          # ভার্সন কোড ও নাম আপডেট
+          sed -i "s/versionCode [0-9]*/versionCode ${{ steps.meta.outputs.code }}/" android/app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"${{ steps.meta.outputs.version }}\"/" android/app/build.gradle
+          
+          # Kotlin Conflict Fix এবং UI Constraint যুক্ত করা
+          sed -i '/dependencies {/a \    implementation("androidx.core:core-ktx:1.12.0")\n    constraints {\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22")\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22")\n    }' android/app/build.gradle
+
+          # MainActivity.java আপডেট (Responsive Status Bar & Back Navigation)
+          PKG_PATH=$(echo "${{ steps.meta.outputs.package }}" | sed 's/\./\//g')
+          cat <<EOF > "android/app/src/main/java/$PKG_PATH/MainActivity.java"
+          package ${{ steps.meta.outputs.package }};
+
+          import android.graphics.Color;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.view.Window;
+          import android.view.WindowManager;
+          import android.webkit.WebView;
+          import androidx.core.view.ViewCompat;
+          import androidx.core.view.WindowInsetsCompat;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  // স্ট্যাটাস বার ট্রান্সপারেন্ট করা
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                      Window window = getWindow();
+                      window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+                      window.setStatusBarColor(Color.TRANSPARENT);
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                          window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+                      }
+                  }
+
+                  // Android 14/15 এর জন্য রেসপনসিভ প্যাডিং (Status Bar height অনুযায়ী)
+                  View webView = getBridge().getWebView();
+                  ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content), (v, windowInsets) -> {
+                      int statusBarHeight = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+                      v.setPadding(0, statusBarHeight, 0, 0);
+                      return windowInsets;
+                  });
+              }
+
+              @Override
+              public void onBackPressed() {
+                  WebView webView = getBridge().getWebView();
+                  if (webView.canGoBack()) {
+                      webView.goBack();
+                  } else {
+                      super.onBackPressed();
+                  }
+              }
+          }
+          EOF
+
+          npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.name }}-v${{ steps.meta.outputs.version }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
