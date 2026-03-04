@@ -2,5 +2,11 @@
   "appName": "শিক্ষা",
   "appPackage": "com.sikkha.tnx",
   "versionName": "3.0.0",
-  "versionCode": 3
+  "versionCode": 3,
+  "updateJsonUrl": "https://raw.githubusercontent.com/nayem-48ai/Sikkha-48/main/update.json",
+  "permissions": [
+    "INTERNET",
+    "READ_EXTERNAL_STORAGE",
+    "WRITE_EXTERNAL_STORAGE"
+  ]
 }
