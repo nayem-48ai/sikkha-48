@@ -15,11 +15,12 @@ jobs:
       - name: Extract App Metadata
         id: meta
         run: |
+          # মেটাডেটা থেকে তথ্য রিড করা
           APP_NAME=$(jq -r '.appName' assets/app-metadata.json)
           APP_PKG=$(jq -r '.appPackage' assets/app-metadata.json)
           APP_VER=$(jq -r '.versionName' assets/app-metadata.json)
           APP_CODE=$(jq -r '.versionCode' assets/app-metadata.json)
-          # Permissions Array রিড করা
+          # পারমিশনগুলো কমা দিয়ে আলাদা করে রিড করা
           PERMS=$(jq -r '.permissions | join(",")' assets/app-metadata.json)
           
           echo "name=$APP_NAME" >> $GITHUB_OUTPUT
@@ -28,41 +29,47 @@ jobs:
           echo "code=$APP_CODE" >> $GITHUB_OUTPUT
           echo "perms=$PERMS" >> $GITHUB_OUTPUT
 
-      - name: Inject Update System into React
+      - name: Inject Update System into Root App.tsx
         run: |
-          # ১. UpdateChecker ডাউনলোড করা
-          mkdir -p src/components
-          curl -o src/components/UpdateChecker.tsx https://raw.githubusercontent.com/nayem-48ai/sikkha-48/main/components/UpdateChecker.tsx
+          # ১. components ফোল্ডার তৈরি এবং UpdateChecker ডাউনলোড/আপডেট
+          mkdir -p components
+          curl -L -o components/UpdateChecker.tsx https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/components/UpdateChecker.tsx
           
-          # ২. App.tsx এ ইম্পোর্ট এবং কম্পোনেন্ট ইনজেক্ট করা
-          # যদি ইম্পোর্ট না থাকে তবেই করবে
-          if ! grep -q "import UpdateChecker" src/App.tsx; then
-            sed -i "1i import UpdateChecker from './components/UpdateChecker';" src/App.tsx
+          # ২. App.tsx (Root) এ ইম্পোর্ট ইনজেক্ট করা (যদি না থাকে)
+          if ! grep -q "import UpdateChecker" App.tsx; then
+            sed -i "1i import UpdateChecker from './components/UpdateChecker';" App.tsx
           fi
           
-          # Router এর ঠিক নিচে <UpdateChecker /> বসানো
-          if ! grep -q "<UpdateChecker />" src/App.tsx; then
-            sed -i '/<HashRouter>/a \      <UpdateChecker />' src/App.tsx || sed -i '/<Router>/a \      <UpdateChecker />' src/App.tsx
+          # ৩. Router এর ঠিক নিচে <UpdateChecker /> ইনজেক্ট করা
+          if ! grep -q "<UpdateChecker />" App.tsx; then
+            # HashRouter বা সাধারণ Router—যেটিই থাকুক তার নিচে বসাবে
+            sed -i '/<HashRouter>/a \      <UpdateChecker />' App.tsx || sed -i '/<Router>/a \      <UpdateChecker />' App.tsx
           fi
 
-      - name: Setup Node & Build
+      - name: Setup Node.js & Build Project
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install & Obfuscate
         run: |
           npm install
           npm run build
           npm install -g javascript-obfuscator
+          # বিল্ড হওয়া এসেটগুলো অবফাসকেট করা
           javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
 
-      - name: Setup Java & Capacitor
+      - name: Setup Java 21 & Capacitor
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '21'
 
-      - name: Configure Android Project
+      - name: Android Configuration & Dynamic Permissions
         run: |
           npx cap add android || true
           
-          # ডাইনামিক পারমিশন ইনজেকশন
+          # মেটাডেটা থেকে ডাইনামিক পারমিশন ইনজেক্ট করা
           IFS=',' read -ra ADDR <<< "${{ steps.meta.outputs.perms }}"
           for i in "${ADDR[@]}"; do
             if ! grep -q "android.permission.$i" android/app/src/main/AndroidManifest.xml; then
@@ -70,10 +77,15 @@ jobs:
             fi
           done
 
-          # ভার্সন আপডেট
+          # বিল্ড গ্র্যাডলে ভার্সন সিঙ্ক করা
           sed -i "s/versionCode [0-9]*/versionCode ${{ steps.meta.outputs.code }}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"${{ steps.meta.outputs.version }}\"/" android/app/build.gradle
           
+          # অ্যাপের নাম আপডেট করা
+          if [ -f "android/app/src/main/res/values/strings.xml" ]; then
+            sed -i "s/\"app_name\">.*<\/string>/\"app_name\">${{ steps.meta.outputs.name }}<\/string>/" android/app/src/main/res/values/strings.xml
+          fi
+
           npx cap sync android
 
       - name: Build APK
@@ -82,7 +94,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.name }}-v${{ steps.meta.outputs.version }}
