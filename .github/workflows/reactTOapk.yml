@@ -15,12 +15,10 @@ jobs:
       - name: Extract App Metadata
         id: meta
         run: |
-          # মেটাডেটা থেকে তথ্য রিড করা
           APP_NAME=$(jq -r '.appName' assets/app-metadata.json)
           APP_PKG=$(jq -r '.appPackage' assets/app-metadata.json)
           APP_VER=$(jq -r '.versionName' assets/app-metadata.json)
           APP_CODE=$(jq -r '.versionCode' assets/app-metadata.json)
-          # পারমিশনগুলো কমা দিয়ে আলাদা করে রিড করা
           PERMS=$(jq -r '.permissions | join(",")' assets/app-metadata.json)
           
           echo "name=$APP_NAME" >> $GITHUB_OUTPUT
@@ -31,18 +29,14 @@ jobs:
 
       - name: Inject Update System into Root App.tsx
         run: |
-          # ১. components ফোল্ডার তৈরি এবং UpdateChecker ডাউনলোড/আপডেট
           mkdir -p components
           curl -L -o components/UpdateChecker.tsx https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/components/UpdateChecker.tsx
           
-          # ২. App.tsx (Root) এ ইম্পোর্ট ইনজেক্ট করা (যদি না থাকে)
           if ! grep -q "import UpdateChecker" App.tsx; then
             sed -i "1i import UpdateChecker from './components/UpdateChecker';" App.tsx
           fi
           
-          # ৩. Router এর ঠিক নিচে <UpdateChecker /> ইনজেক্ট করা
           if ! grep -q "<UpdateChecker />" App.tsx; then
-            # HashRouter বা সাধারণ Router—যেটিই থাকুক তার নিচে বসাবে
             sed -i '/<HashRouter>/a \      <UpdateChecker />' App.tsx || sed -i '/<Router>/a \      <UpdateChecker />' App.tsx
           fi
 
@@ -51,25 +45,34 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install & Obfuscate
+      - name: Install & Build Web
         run: |
           npm install
+          # Capacitor CLI লোকালি ইনস্টল নিশ্চিত করা
+          npm install @capacitor/cli @capacitor/core @capacitor/android
           npm run build
           npm install -g javascript-obfuscator
-          # বিল্ড হওয়া এসেটগুলো অবফাসকেট করা
           javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
 
-      - name: Setup Java 21 & Capacitor
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '21'
 
-      - name: Android Configuration & Dynamic Permissions
+      - name: Initialize & Configure Capacitor Android
         run: |
-          npx cap add android || true
+          # যদি কনফিগারেশন ফাইল না থাকে তবে তৈরি করবে
+          if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
+            npx cap init "${{ steps.meta.outputs.name }}" "${{ steps.meta.outputs.package }}" --web-dir dist
+          fi
+
+          # অ্যান্ড্রয়েড প্ল্যাটফর্ম অ্যাড করা (ফোল্ডার না থাকলে তৈরি করবে)
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
           
-          # মেটাডেটা থেকে ডাইনামিক পারমিশন ইনজেক্ট করা
+          # এবার ফাইলগুলো এডিট করা (ফোল্ডার তৈরি হওয়ার পর)
           IFS=',' read -ra ADDR <<< "${{ steps.meta.outputs.perms }}"
           for i in "${ADDR[@]}"; do
             if ! grep -q "android.permission.$i" android/app/src/main/AndroidManifest.xml; then
@@ -77,11 +80,9 @@ jobs:
             fi
           done
 
-          # বিল্ড গ্র্যাডলে ভার্সন সিঙ্ক করা
           sed -i "s/versionCode [0-9]*/versionCode ${{ steps.meta.outputs.code }}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"${{ steps.meta.outputs.version }}\"/" android/app/build.gradle
           
-          # অ্যাপের নাম আপডেট করা
           if [ -f "android/app/src/main/res/values/strings.xml" ]; then
             sed -i "s/\"app_name\">.*<\/string>/\"app_name\">${{ steps.meta.outputs.name }}<\/string>/" android/app/src/main/res/values/strings.xml
           fi
