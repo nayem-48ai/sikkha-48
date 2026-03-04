@@ -29,26 +29,31 @@ jobs:
 
       - name: Inject Update System into Root App.tsx
         run: |
+          # ১. components ফোল্ডার তৈরি এবং UpdateChecker ডাউনলোড (রিট্রাই সহ)
           mkdir -p components
-          curl -L -o components/UpdateChecker.tsx https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/components/UpdateChecker.tsx
+          curl -L --retry 3 --retry-delay 5 -o components/UpdateChecker.tsx https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/components/UpdateChecker.tsx
           
-          if ! grep -q "import UpdateChecker" App.tsx; then
-            sed -i "1i import UpdateChecker from './components/UpdateChecker';" App.tsx
-          fi
-          
-          if ! grep -q "<UpdateChecker />" App.tsx; then
-            sed -i '/<HashRouter>/a \      <UpdateChecker />' App.tsx || sed -i '/<Router>/a \      <UpdateChecker />' App.tsx
+          # ২. App.tsx এ ইম্পোর্ট এবং ইনজেকশন
+          if [ -f "App.tsx" ]; then
+            if ! grep -q "import UpdateChecker" App.tsx; then
+              sed -i "1i import UpdateChecker from './components/UpdateChecker';" App.tsx
+            fi
+            
+            if ! grep -q "<UpdateChecker />" App.tsx; then
+              sed -i '/<HashRouter>/a \      <UpdateChecker />' App.tsx || sed -i '/<Router>/a \      <UpdateChecker />' App.tsx
+            fi
           fi
 
       - name: Setup Node.js & Build Project
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
-      - name: Install & Build Web
+      - name: Install Dependencies & Build Web
         run: |
           npm install
-          npm install @capacitor/cli @capacitor/core @capacitor/android
+          npm install @capacitor/cli @capacitor/core @capacitor/android @capacitor/assets
           npm run build
           npm install -g javascript-obfuscator
           javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
@@ -61,6 +66,7 @@ jobs:
 
       - name: Initialize & Configure Capacitor Android
         run: |
+          # Capacitor ইনিশিয়ালাইজেশন
           if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
             npx cap init "${{ steps.meta.outputs.name }}" "${{ steps.meta.outputs.package }}" --web-dir dist
           fi
@@ -68,12 +74,13 @@ jobs:
           if [ ! -d "android" ]; then
             npx cap add android
           fi
+
+          # ১. আইকন জেনারেট করা (যদি assets/icon.png থাকে)
+          if [ -f "assets/icon.png" ]; then
+            npx capacitor-assets generate --android
+          fi
           
-          # --- Kotlin Duplicate Class Fix (সবচেয়ে গুরুত্বপূর্ণ অংশ) ---
-          # এটি বিল্ড গ্র্যাডলে কনস্ট্রেইন্ট যোগ করবে যাতে ডুপ্লিকেট ক্লাস না আসে
-          sed -i '/dependencies {/a \    constraints {\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22") { because("kotlin-stdlib-jdk7 is now part of kotlin-stdlib") }\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22") { because("kotlin-stdlib-jdk8 is now part of kotlin-stdlib") }\n    }' android/app/build.gradle
-          
-          # পারমিশন ইনজেকশন
+          # ২. পারমিশন ইনজেকশন (AndroidManifest.xml)
           IFS=',' read -ra ADDR <<< "${{ steps.meta.outputs.perms }}"
           for i in "${ADDR[@]}"; do
             if ! grep -q "android.permission.$i" android/app/src/main/AndroidManifest.xml; then
@@ -81,7 +88,10 @@ jobs:
             fi
           done
 
-          # ভার্সন আপডেট
+          # ৩. ডুপ্লিকেট ক্লাস ফিক্স (Kotlin Constraints)
+          sed -i '/dependencies {/a \    constraints {\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22")\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22")\n    }' android/app/build.gradle
+
+          # ৪. ভার্সন সিঙ্ক
           sed -i "s/versionCode [0-9]*/versionCode ${{ steps.meta.outputs.code }}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"${{ steps.meta.outputs.version }}\"/" android/app/build.gradle
           
@@ -95,7 +105,8 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          # Gradle ডাউনলোড ফেল এড়াতে রিট্রাই লজিক বা সরাসরি স্ট্যাকট্রেস চেক
+          ./gradlew assembleDebug --no-daemon
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
