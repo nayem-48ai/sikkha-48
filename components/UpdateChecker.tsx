@@ -1,14 +1,10 @@
 import React, { useEffect, useState } from 'react';
-// সরাসরি মেটাডেটা ফাইল ইম্পোর্ট করা হলো
 import appMetadata from '../assets/app-metadata.json'; 
-
-const UPDATE_JSON_URL = "https://raw.githubusercontent.com/nayem-48ai/Sikkha-48/main/update.json";
 
 const UpdateChecker: React.FC = () => {
     const [updateData, setUpdateData] = useState<any>(null);
-
-    // মেটাডেটা থেকে ডাইনামিক ভাবে ভার্সন কোড নেওয়া হচ্ছে
     const CURRENT_VERSION_CODE = appMetadata.versionCode;
+    const UPDATE_JSON_URL = appMetadata.updateJsonUrl;
 
     useEffect(() => {
         const checkUpdate = async () => {
