@@ -29,9 +29,9 @@ jobs:
 
       - name: Inject Update System into Root App.tsx
         run: |
-          # ১. components ফোল্ডার তৈরি এবং UpdateChecker ডাউনলোড (রিট্রাই সহ)
+          # ১. components ফোল্ডার তৈরি এবং UpdateChecker ডাউনলোড
           mkdir -p components
-          curl -L --retry 3 --retry-delay 5 -o components/UpdateChecker.tsx https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/components/UpdateChecker.tsx
+          curl -L --retry 5 --retry-delay 10 -o components/UpdateChecker.tsx https://raw.githubusercontent.com/nayem-48ai/nayem-48ai/refs/heads/tnx_bd/components/UpdateChecker.tsx
           
           # ২. App.tsx এ ইম্পোর্ট এবং ইনজেকশন
           if [ -f "App.tsx" ]; then
@@ -44,16 +44,17 @@ jobs:
             fi
           fi
 
-      - name: Setup Node.js & Build Project
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          # ক্যাশ সরিয়ে দেওয়া হয়েছে কারণ package-lock.json নেই
 
       - name: Install Dependencies & Build Web
         run: |
-          npm install
-          npm install @capacitor/cli @capacitor/core @capacitor/android @capacitor/assets
+          # package-lock না থাকলেও যেন এরর না দেয়
+          npm install --no-package-lock
+          npm install @capacitor/cli @capacitor/core @capacitor/android @capacitor/assets --no-package-lock
           npm run build
           npm install -g javascript-obfuscator
           javascript-obfuscator ./dist/assets --output ./dist/assets --compact true --self-defending true
@@ -66,7 +67,6 @@ jobs:
 
       - name: Initialize & Configure Capacitor Android
         run: |
-          # Capacitor ইনিশিয়ালাইজেশন
           if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
             npx cap init "${{ steps.meta.outputs.name }}" "${{ steps.meta.outputs.package }}" --web-dir dist
           fi
@@ -75,12 +75,12 @@ jobs:
             npx cap add android
           fi
 
-          # ১. আইকন জেনারেট করা (যদি assets/icon.png থাকে)
+          # আইকন জেনারেট (যদি assets/icon.png থাকে)
           if [ -f "assets/icon.png" ]; then
             npx capacitor-assets generate --android
           fi
           
-          # ২. পারমিশন ইনজেকশন (AndroidManifest.xml)
+          # পারমিশন ইনজেকশন
           IFS=',' read -ra ADDR <<< "${{ steps.meta.outputs.perms }}"
           for i in "${ADDR[@]}"; do
             if ! grep -q "android.permission.$i" android/app/src/main/AndroidManifest.xml; then
@@ -88,10 +88,10 @@ jobs:
             fi
           done
 
-          # ৩. ডুপ্লিকেট ক্লাস ফিক্স (Kotlin Constraints)
+          # ডুপ্লিকেট ক্লাস ফিক্স
           sed -i '/dependencies {/a \    constraints {\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22")\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22")\n    }' android/app/build.gradle
 
-          # ৪. ভার্সন সিঙ্ক
+          # ভার্সন আপডেট
           sed -i "s/versionCode [0-9]*/versionCode ${{ steps.meta.outputs.code }}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"${{ steps.meta.outputs.version }}\"/" android/app/build.gradle
           
@@ -105,7 +105,6 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          # Gradle ডাউনলোড ফেল এড়াতে রিট্রাই লজিক বা সরাসরি স্ট্যাকট্রেস চেক
           ./gradlew assembleDebug --no-daemon
 
       - name: Upload Artifact
