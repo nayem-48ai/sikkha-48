@@ -48,7 +48,6 @@ jobs:
       - name: Install & Build Web
         run: |
           npm install
-          # Capacitor CLI লোকালি ইনস্টল নিশ্চিত করা
           npm install @capacitor/cli @capacitor/core @capacitor/android
           npm run build
           npm install -g javascript-obfuscator
@@ -62,17 +61,19 @@ jobs:
 
       - name: Initialize & Configure Capacitor Android
         run: |
-          # যদি কনফিগারেশন ফাইল না থাকে তবে তৈরি করবে
           if [ ! -f "capacitor.config.ts" ] && [ ! -f "capacitor.config.json" ]; then
             npx cap init "${{ steps.meta.outputs.name }}" "${{ steps.meta.outputs.package }}" --web-dir dist
           fi
 
-          # অ্যান্ড্রয়েড প্ল্যাটফর্ম অ্যাড করা (ফোল্ডার না থাকলে তৈরি করবে)
           if [ ! -d "android" ]; then
             npx cap add android
           fi
           
-          # এবার ফাইলগুলো এডিট করা (ফোল্ডার তৈরি হওয়ার পর)
+          # --- Kotlin Duplicate Class Fix (সবচেয়ে গুরুত্বপূর্ণ অংশ) ---
+          # এটি বিল্ড গ্র্যাডলে কনস্ট্রেইন্ট যোগ করবে যাতে ডুপ্লিকেট ক্লাস না আসে
+          sed -i '/dependencies {/a \    constraints {\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22") { because("kotlin-stdlib-jdk7 is now part of kotlin-stdlib") }\n        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22") { because("kotlin-stdlib-jdk8 is now part of kotlin-stdlib") }\n    }' android/app/build.gradle
+          
+          # পারমিশন ইনজেকশন
           IFS=',' read -ra ADDR <<< "${{ steps.meta.outputs.perms }}"
           for i in "${ADDR[@]}"; do
             if ! grep -q "android.permission.$i" android/app/src/main/AndroidManifest.xml; then
@@ -80,6 +81,7 @@ jobs:
             fi
           done
 
+          # ভার্সন আপডেট
           sed -i "s/versionCode [0-9]*/versionCode ${{ steps.meta.outputs.code }}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"${{ steps.meta.outputs.version }}\"/" android/app/build.gradle
           
